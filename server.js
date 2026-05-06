@@ -118,13 +118,14 @@ const emitGameUpdate = (room) => {
 
   if (game.mode === GAME_MODES.FOG_OF_WAR) {
     for (const color of ["white", "black"]) {
-      const socketId = game.players[color];
+      const socketId = game.players[color]?.socketId;
       if (!socketId) continue;
       const fogBoard = buildFogBoardForColor(game.board, color);
       io.to(socketId).emit("update", { ...basePayload, board: fogBoard });
     }
     return;
   }
+
 
   io.to(room).emit("update", basePayload);
 
