@@ -1,0 +1,25 @@
+{
+  "name": "multiplayergamechess",
+  "version": "1.0.0",
+  "description": "Chess Multiplayer Game",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Drei-i/MultiplayerGameChess.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Drei-i/MultiplayerGameChess/issues"
+  },
+  "homepage": "https://github.com/Drei-i/MultiplayerGameChess#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}

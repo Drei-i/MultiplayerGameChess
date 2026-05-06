@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Chess</title>
+
+<style>
+body {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  min-height:100vh;
+  margin:0;
+  font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #edf3e7 0%, #d8e1cc 35%, #b2c19a 100%);
+  color:#2d3b2f;
+  padding: 24px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: 0.05em;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.board {
+  display:grid;
+  grid-template-columns:repeat(8,72px);
+  margin-top:24px;
+  background: #3b5a3a;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(31, 58, 32, 0.24);
+}
+
+.game-area {
+  display:flex;
+  align-items:flex-start;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.board-wrapper {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.capture-column {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  min-width: 140px;
+  max-width: 160px;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid rgba(82, 92, 74, 0.16);
+  border-radius: 18px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 24px rgba(31, 58, 32, 0.12);
+}
+
+.capture-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  color: #4e644a;
+}
+
+.capture-pieces {
+  display:flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.capture-token {
+  width: 32px;
+  height: 32px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  border-radius: 10px;
+  background: rgba(39, 45, 33, 0.08);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.piece {
+  font-family: "Segoe UI Symbol", "Apple Color Emoji", Arial, sans-serif;
+  font-weight: 900;
+  text-shadow: 0 0 1px rgba(0,0,0,0.15);
+}
+
+.piece-white {
+  color: #ffffff;
+  text-shadow: 0 0 2px rgba(0,0,0,1);
+}
+
+.piece-black {
+  color: #0c0c0c;
+  text-shadow: 0 0 1px rgba(255,255,255,0.2);
+}
+
+.square {
+  width:72px;
+  height:72px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:44px;
+  font-weight: 900;
+  line-height: 1;
+  user-select:none;
+  cursor: grab;
+  position: relative;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 12px;
+}
+
+.square.dragging {
+  opacity: 0.65;
+}
+
+.square.selected {
+  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.9);
+}
+
+.square.valid-move {
+  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.55);
+}
+
+.white {
+  background: #f2ecd7;
+  color: #1f2b1f;
+}
+
+.black {
+  background: #6f8f5d;
+  color: #f8f8f2;
+}
+
+#status {
+  margin-top: 14px;
+  font-size: 1.05rem;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 6px 20px rgba(79, 84, 67, 0.12);
+}
+
+#logs {
+  width: min(680px, 100%);
+  max-width: 680px;
+  min-height: 180px;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid rgba(82, 92, 74, 0.15);
+  padding: 14px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95rem;
+  margin-top: 18px;
+  border-radius: 16px;
+}
+
+.log-entry {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(82, 92, 74, 0.08);
+}
+
+.log-entry.error {
+  color: #a83333;
+}
+
+.log-entry.success {
+  color: #2d6b2f;
+}
+
+.log-entry.info {
+  color: #4e5a44;
+}
+</style>
+</head>
+
+<body>
+
+<h1>♔ Chess Multiplayer ♚</h1>
+<h3 id="status">Loading...</h3>
+<div class="game-area">
+  <div class="capture-column">
+    <div class="capture-title">White captured</div>
+    <div id="whiteCaptured" class="capture-pieces"></div>
+  </div>
+  <div class="board-wrapper">
+    <div class="board" id="board"></div>
+  </div>
+  <div class="capture-column">
+    <div class="capture-title">Black captured</div>
+    <div id="blackCaptured" class="capture-pieces"></div>
+  </div>
+</div>
+<div id="logs"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const socket = io();
+
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+const logsEl = document.getElementById("logs");
+const whiteCapturedEl = document.getElementById("whiteCaptured");
+const blackCapturedEl = document.getElementById("blackCaptured");
+
+let board = null;
+let room = null;
+let myColor = null;
+let turn = "white";
+let selected = null;
+let validMoves = [];
+let draggedPiece = null;
+let gameStatus = { status: "active" };
+let capturedWhite = [];
+let capturedBlack = [];
+
+const symbols = {
+ r:"♜", n:"♞", b:"♝", q:"♛", k:"♚", p:"♟",
+ R:"♖", N:"♘", B:"♗", Q:"♕", K:"♔", P:"♙"
+};
+
+// =========================
+// LOGGING
+// =========================
+function log(message, type = "info") {
+  const entry = document.createElement("div");
+  entry.className = `log-entry ${type}`;
+  entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  logsEl.appendChild(entry);
+  logsEl.scrollTop = logsEl.scrollHeight;
+  console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// =========================
+// PIECE VALIDATION (CLIENT-SIDE PREVIEW)
+// =========================
+function getPieceType(piece) {
+  if (!piece) return null;
+  return piece.toLowerCase();
+}
+
+function isWhitePiece(piece) {
+  return piece === piece.toUpperCase();
+}
+
+function isBlackPiece(piece) {
+  return piece === piece.toLowerCase() && piece !== "";
+}
+
+function isEnemyPiece(piece, isWhite) {
+  if (!piece) return false;
+  return isWhite ? isBlackPiece(piece) : isWhitePiece(piece);
+}
+
+function isFriendlyPiece(piece, isWhite) {
+  if (!piece) return false;
+  return isWhite ? isWhitePiece(piece) : isBlackPiece(piece);
+}
+
+// Compute valid moves for move preview (client-side only)
+function getValidMoves(r, c) {
+  if (!board) return [];
+  
+  const piece = board[r][c];
+  if (!piece) return [];
+  
+  const isWhite = isWhitePiece(piece);
+  if (isFriendlyPiece(piece, isWhite)) {
+    // Only show valid moves if it's your turn and your piece
+    if (turn !== myColor || isWhite !== (myColor === "white")) return [];
+  } else {
+    return [];
+  }
+  
+  const type = getPieceType(piece);
+  const moves = [];
+  
+  const addMove = (nr, nc) => {
+    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+      const target = board[nr][nc];
+      if (!target || isEnemyPiece(target, isWhite)) {
+        moves.push([nr, nc]);
+      }
+    }
+  };
+  
+  const addSlide = (dr, dc) => {
+    for (let i = 1; i < 8; i++) {
+      const nr = r + dr * i;
+      const nc = c + dc * i;
+      if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) break;
+      
+      const target = board[nr][nc];
+      if (!target) {
+        moves.push([nr, nc]);
+      } else {
+        if (isEnemyPiece(target, isWhite)) {
+          moves.push([nr, nc]);
+        }
+        break;
+      }
+    }
+  };
+  
+  if (type === "p") {
+    const dir = isWhite ? -1 : 1;
+    const startRow = isWhite ? 6 : 1;
+    
+    const forwardRow = r + dir;
+    if (forwardRow >= 0 && forwardRow < 8 && !board[forwardRow][c]) {
+      moves.push([forwardRow, c]);
+      if (r === startRow) {
+        const doubleRow = r + 2 * dir;
+        if (!board[doubleRow][c]) {
+          moves.push([doubleRow, c]);
+        }
+      }
+    }
+    
+    [-1, 1].forEach(dcol => {
+      const nr = r + dir;
+      const nc = c + dcol;
+      if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+        const target = board[nr][nc];
+        if (isEnemyPiece(target, isWhite)) {
+          moves.push([nr, nc]);
+        }
+      }
+    });
+  } else if (type === "n") {
+    [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr, dc]) => {
+      addMove(r + dr, c + dc);
+    });
+  } else if (type === "b") {
+    [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr, dc]) => addSlide(dr, dc));
+  } else if (type === "r") {
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr, dc]) => addSlide(dr, dc));
+  } else if (type === "q") {
+    [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr, dc]) => addSlide(dr, dc));
+  } else if (type === "k") {
+    [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr, dc]) => {
+      addMove(r + dr, c + dc);
+    });
+  }
+  
+  return moves;
+}
+
+// =========================
+// SOCKET EVENTS
+// =========================
+socket.on("waiting", () => {
+  statusEl.textContent = "⏳ Waiting for opponent...";
+  log("Waiting for opponent to connect", "info");
+});
+
+socket.on("start", (d) => {
+  myColor = d.color;
+  room = d.room;
+  statusEl.textContent = `You are playing as ${myColor.toUpperCase()}`;
+  log(`Game started! You are ${myColor}. Room: ${room}`, "success");
+});
+
+socket.on("update", (d) => {
+  board = d.board;
+  turn = d.turn;
+  gameStatus = d.gameStatus || { status: "active" };
+  capturedWhite = d.capturedWhite || [];
+  capturedBlack = d.capturedBlack || [];
+  
+  let statusText = `It's ${turn.toUpperCase()}'s turn`;
+  if (gameStatus.status === "check") {
+    statusText += " - ⚠️ CHECK! (Find a way to escape!)";
+  } else if (gameStatus.status === "checkmate") {
+    statusText = `CHECKMATE! ${gameStatus.winner.toUpperCase()} WINS! 👑`;
+  } else if (gameStatus.status === "stalemate") {
+    statusText = "STALEMATE! It's a draw. 🤝";
+  }
+  
+  if (turn === myColor && gameStatus.status === "active") {
+    statusText += " (YOUR TURN)";
+  } else if (turn === myColor && gameStatus.status === "check") {
+    statusText += " (YOUR TURN - YOU'RE IN CHECK!)";
+  }
+  
+  statusEl.textContent = statusText;
+  render();
+  renderCaptured();
+});
+
+socket.on("moveConfirmed", (d) => {
+  log(`✅ Move confirmed: [${d.from}] → [${d.to}]${d.captured ? ` (captured ${d.captured})` : ""}${d.promoted ? " [PAWN PROMOTED]" : ""}`, "success");
+});
+
+socket.on("moveRejected", (d) => {
+  log(`❌ Move rejected: ${d.reason}`, "error");
+  selected = null;
+  validMoves = [];
+  render();
+});
+
+socket.on("connect_error", (error) => {
+  log(`Connection error: ${error}`, "error");
+});
+
+socket.on("error", (error) => {
+  log(`Server error: ${error}`, "error");
+});
+
+// =========================
+// MOVE
+// =========================
+function sendMove(fr, fc, tr, tc) {
+  log(`📤 Sending move: [${fr},${fc}] → [${tr},${tc}]`, "info");
+
+  socket.emit("move", {
+    room,
+    from: [fr, fc],
+    to: [tr, tc]
+  });
+}
+
+// =========================
+// RENDER
+// =========================
+function render() {
+  if (!board) return;
+
+  boardEl.innerHTML = "";
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+
+      const sq = document.createElement("div");
+      sq.className = "square " + ((r + c) % 2 ? "black" : "white");
+
+      const piece = board[r][c];
+      if (piece) {
+        const pieceEl = document.createElement("span");
+        pieceEl.className = `piece ${isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
+        pieceEl.textContent = symbols[piece] || "";
+        sq.appendChild(pieceEl);
+      }
+
+      // Highlight selected square
+      if (selected && selected[0] === r && selected[1] === c) {
+        sq.classList.add("selected");
+      }
+
+      // Highlight valid moves
+      if (validMoves.some(([vr, vc]) => vr === r && vc === c)) {
+        sq.classList.add("valid-move");
+      }
+
+      // Drag start
+      sq.draggable = true;
+      sq.addEventListener("dragstart", (e) => {
+        if (gameStatus.status === "checkmate" || gameStatus.status === "stalemate") {
+          e.preventDefault();
+          return;
+        }
+
+        if (turn !== myColor) {
+          e.preventDefault();
+          return;
+        }
+        
+        const piece = board[r][c];
+        if (!piece) {
+          e.preventDefault();
+          return;
+        }
+        
+        const isWhite = isWhitePiece(piece);
+        if (!isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
+          e.preventDefault();
+          return;
+        }
+        
+        draggedPiece = [r, c];
+        sq.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+      });
+
+      sq.addEventListener("dragend", (e) => {
+        draggedPiece = null;
+        sq.classList.remove("dragging");
+      });
+
+      // Drag over
+      sq.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      });
+
+      // Drop
+      sq.addEventListener("drop", (e) => {
+        e.preventDefault();
+        
+        if (!draggedPiece) return;
+        
+        const [fr, fc] = draggedPiece;
+        
+        if (fr === r && fc === c) {
+          draggedPiece = null;
+          return;
+        }
+        
+        sendMove(fr, fc, r, c);
+        draggedPiece = null;
+        selected = null;
+      });
+
+      // Click for move confirmation
+      sq.addEventListener("click", () => {
+        if (gameStatus.status === "checkmate" || gameStatus.status === "stalemate") {
+          log("Game is over!", "error");
+          return;
+        }
+
+        if (turn !== myColor) {
+          log("Not your turn!", "error");
+          return;
+        }
+
+        if (selected) {
+          const [sr, sc] = selected;
+          if (sr === r && sc === c) {
+            selected = null;
+            validMoves = [];
+            render();
+            return;
+          }
+
+          sendMove(sr, sc, r, c);
+          selected = null;
+          validMoves = [];
+          return;
+        }
+
+        const piece = board[r][c];
+        if (!piece) {
+          selected = null;
+          validMoves = [];
+          render();
+          return;
+        }
+
+        const isWhite = isWhitePiece(piece);
+        if (!isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
+          log("That piece is not yours!", "error");
+          selected = null;
+          validMoves = [];
+          render();
+          return;
+        }
+
+        selected = [r, c];
+        validMoves = getValidMoves(r, c);
+        log(`Selected piece at [${r},${c}]. ${validMoves.length} valid moves available.`, "info");
+        render();
+      });
+
+      boardEl.appendChild(sq);
+    }
+  }
+}
+
+function renderCaptured() {
+  if (!whiteCapturedEl || !blackCapturedEl) return;
+
+  whiteCapturedEl.innerHTML = "";
+  blackCapturedEl.innerHTML = "";
+
+  capturedWhite.forEach(piece => {
+    const token = document.createElement("div");
+    token.className = `capture-token ${isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
+    token.textContent = symbols[piece] || "";
+    whiteCapturedEl.appendChild(token);
+  });
+
+  capturedBlack.forEach(piece => {
+    const token = document.createElement("div");
+    token.className = `capture-token ${isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
+    token.textContent = symbols[piece] || "";
+    blackCapturedEl.appendChild(token);
+  });
+}
+</script>
+
+</body>
+</html>
