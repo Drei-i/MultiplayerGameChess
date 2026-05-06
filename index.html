@@ -398,6 +398,20 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
 <script>
 const socket = io();
 
+// Attempt match reconnect after refresh (if we have a token stored).
+try {
+  const saved = localStorage.getItem("chess_reconnect");
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    if (parsed?.room && parsed?.token) {
+      socket.emit("reconnect", { room: parsed.room, token: parsed.token });
+    }
+  }
+} catch (e) {
+  // ignore
+}
+
+
 const boardEl = document.getElementById("board");
 const statusEl = document.getElementById("status");
 const logsEl = document.getElementById("logs");
@@ -625,6 +639,12 @@ socket.on("start", (d) => {
   myColor = d.color;
   room = d.room;
   mode = d.mode || mode;
+
+  if (d?.token) {
+    localStorage.setItem("chess_reconnect", JSON.stringify({ room: d.room, token: d.token }));
+  }
+
+
   isQueued = false;
   modeSelectEl.disabled = true;
   queueBtnEl.disabled = true;

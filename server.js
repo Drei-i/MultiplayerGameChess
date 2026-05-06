@@ -652,6 +652,27 @@ io.on("connection", (socket) => {
   // Register move handler for this socket
   socket.on("move", (data) => handleMove(socket, data));
 
+  // Allow client refresh to reconnect to the existing match using a token.
+  socket.on("reconnect", (data = {}) => {
+    const { room, token } = data;
+    const game = rooms[room];
+    if (!game || !token) return;
+
+    const isWhiteToken = game.players.white?.reconnectToken === token;
+    const isBlackToken = game.players.black?.reconnectToken === token;
+    const playerColor = isWhiteToken ? "white" : isBlackToken ? "black" : null;
+    if (!playerColor) return;
+
+    // Rebind this socket to the player color.
+    game.players[playerColor].socketId = socket.id;
+
+    socket.join(room);
+    // Re-send start + current game snapshot.
+    socket.emit("start", { color: playerColor, room, mode: game.mode, token });
+    emitGameUpdate(room);
+  });
+
+
   socket.on("queue", (data = {}) => {
     const mode = normalizeMode(data.mode);
     if (!mode) {
@@ -688,13 +709,16 @@ io.on("connection", (socket) => {
 
       const room = "room-" + Date.now();
 
+      const tokenA = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const tokenB = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+
       const game = {
         mode,
         board: START_BOARD(),
         turn: "white",
         players: {
-          white: { socketId: whiteEntry.socketId, reconnectToken: null },
-          black: { socketId: blackEntry.socketId, reconnectToken: null }
+          white: { socketId: whiteEntry.socketId, reconnectToken: tokenA },
+          black: { socketId: blackEntry.socketId, reconnectToken: tokenB }
         },
 
         history: {
@@ -721,8 +745,8 @@ io.on("connection", (socket) => {
       p1.join(room);
       p2.join(room);
 
-      io.to(whiteEntry.socketId).emit("start", { color: "white", room, mode });
-      io.to(blackEntry.socketId).emit("start", { color: "black", room, mode });
+      io.to(whiteEntry.socketId).emit("start", { color: "white", room, mode, token: tokenA });
+      io.to(blackEntry.socketId).emit("start", { color: "black", room, mode, token: tokenB });
 
       emitGameUpdate(room);
     }
@@ -995,6 +1019,8 @@ io.on("connection", (socket) => {
     emitGameUpdate(room);
   });
 
+  // Keep match state on refresh by allowing reconnection.
+  // We don't destroy room on disconnect; we only remove from queues.
   socket.on("disconnect", () => {
     console.log("🔴 disconnected:", socket.id);
     removeSocketFromAllQueues(socket.id);
