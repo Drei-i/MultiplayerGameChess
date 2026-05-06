@@ -336,6 +336,19 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
         <button id="endLobbyBtn">Lobby</button>
         <button id="endRequeueBtn">Requeue</button>
       </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="promotionOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.38); align-items:center; justify-content:center; padding:18px; z-index:1300;">
+  <div style="background:rgba(255,255,255,0.98); border:1px solid rgba(82, 92, 74, 0.18); border-radius:18px; padding:16px 16px; box-shadow:0 24px 60px rgba(0,0,0,0.22); text-align:center;">
+    <div style="font-weight:900; font-size:1.15rem; margin-bottom:12px;" id="promotionTitle">Promote Pawn</div>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button class="promo-btn" data-piece="Q" style="font-size:24px; padding:10px 20px;">♛</button>
+      <button class="promo-btn" data-piece="R" style="font-size:24px; padding:10px 20px;">♜</button>
+      <button class="promo-btn" data-piece="B" style="font-size:24px; padding:10px 20px;">♝</button>
+      <button class="promo-btn" data-piece="N" style="font-size:24px; padding:10px 20px;">♞</button>
     </div>
   </div>
 </div>
@@ -385,6 +398,7 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
 
 
 <div class="below-board-panel" id="belowBoardActions">
+
   <div class="control-group" id="gameActions">
     <div class="label">Game</div>
     <button id="offerDrawBtn" disabled>Offer draw</button>
@@ -463,11 +477,14 @@ const reviewNextBtnEl = document.getElementById("reviewNextBtn");
 const reviewSliderEl = document.getElementById("reviewSlider");
 const reviewMovesEl = document.getElementById("reviewMoves");
 const reviewMetaEl = document.getElementById("reviewMeta");
+const promotionOverlayEl = document.getElementById("promotionOverlay");
+const promoBtns = document.querySelectorAll(".promo-btn");
 
 let board = null;
 let room = null;
 let myColor = null;
 let turn = "white";
+let lastServerTurn = null;
 let selected = null;
 let validMoves = [];
 let draggedPiece = null;
@@ -524,6 +541,73 @@ function isEnemyPiece(piece, isWhite) {
 function isFriendlyPiece(piece, isWhite) {
   if (!piece) return false;
   return isWhite ? isWhitePiece(piece) : isBlackPiece(piece);
+}
+
+function clone(b) {
+  return b.map(row => [...row]);
+}
+
+function isPathClear(b, r1, c1, r2, c2) {
+  const dr = r2 > r1 ? 1 : r2 < r1 ? -1 : 0;
+  const dc = c2 > c1 ? 1 : c2 < c1 ? -1 : 0;
+  let r = r1 + dr;
+  let c = c1 + dc;
+  while (r !== r2 || c !== c2) {
+    if (b[r][c]) return false;
+    r += dr;
+    c += dc;
+  }
+  return true;
+}
+
+function isSquareAttacked(b, r, c, byWhite) {
+  for (let sr = 0; sr < 8; sr++) {
+    for (let sc = 0; sc < 8; sc++) {
+      const piece = b[sr][sc];
+      if (!piece) continue;
+      if (isWhitePiece(piece) !== byWhite) continue;
+      const type = getPieceType(piece);
+      if (type === "p") {
+        const dir = byWhite ? -1 : 1;
+        if (sr + dir === r && Math.abs(sc - c) === 1) return true;
+      } else if (type === "n") {
+        const dr = Math.abs(sr - r);
+        const dc = Math.abs(sc - c);
+        if ((dr === 2 && dc === 1) || (dr === 1 && dc === 2)) return true;
+      } else if (type === "b") {
+        if (Math.abs(sr - r) === Math.abs(sc - c)) {
+          if (isPathClear(b, sr, sc, r, c)) return true;
+        }
+      } else if (type === "r") {
+        if ((sr === r || sc === c)) {
+          if (isPathClear(b, sr, sc, r, c)) return true;
+        }
+      } else if (type === "q") {
+        if ((sr === r || sc === c) || (Math.abs(sr - r) === Math.abs(sc - c))) {
+          if (isPathClear(b, sr, sc, r, c)) return true;
+        }
+      } else if (type === "k") {
+        if (Math.abs(sr - r) <= 1 && Math.abs(sc - c) <= 1) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function findKing(b, isWhite) {
+  const target = isWhite ? "K" : "k";
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (b[r][c] === target) return [r, c];
+    }
+  }
+  return null;
+}
+
+function isInCheck(b, isWhite) {
+  const kingPos = findKing(b, isWhite);
+  if (!kingPos) return false;
+  return isSquareAttacked(b, kingPos[0], kingPos[1], !isWhite);
 }
 
 // Compute valid moves for move preview (client-side only)
@@ -612,7 +696,12 @@ function getValidMoves(r, c) {
     });
   }
   
-  return moves;
+  return moves.filter(([tr, tc]) => {
+    const testBoard = clone(board);
+    testBoard[tr][tc] = testBoard[r][c];
+    testBoard[r][c] = "";
+    return !isInCheck(testBoard, isWhite);
+  });
 }
 
 // =========================
@@ -956,7 +1045,12 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
           return;
         }
         
-        sendMove(fr, fc, r, c);
+        if (isPromotionMove(fr, r, board[fr][fc])) {
+          pendingPromotion = { from: [fr, fc], to: [r, c] };
+          promotionOverlayEl.style.display = "flex";
+        } else {
+          sendMove(fr, fc, r, c);
+        }
         draggedPiece = null;
         selected = null;
       });
@@ -992,7 +1086,12 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
             return;
           }
 
-          sendMove(sr, sc, r, c);
+          if (isPromotionMove(sr, r, board[sr][sc])) {
+            pendingPromotion = { from: [sr, sc], to: [r, c] };
+            promotionOverlayEl.style.display = "flex";
+          } else {
+            sendMove(sr, sc, r, c);
+          }
           selected = null;
           validMoves = [];
           return;
@@ -1332,6 +1431,18 @@ powerCancelBtnEl.addEventListener("click", () => {
   pendingPower = null;
   log("Power cancelled.", "info");
   render();
+});
+
+promoBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (pendingPromotion) {
+      const piece = btn.dataset.piece;
+      const { from, to } = pendingPromotion;
+      sendMove(from[0], from[1], to[0], to[1], piece);
+      pendingPromotion = null;
+    }
+    promotionOverlayEl.style.display = "none";
+  });
 });
 
 statusEl.textContent = "Pick a mode and press Queue.";

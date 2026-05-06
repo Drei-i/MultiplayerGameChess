@@ -427,6 +427,27 @@ const hasLegalMoves = (board, isWhite, game = {}) => {
 const getGameStatus = (board, turn, game = {}) => {
   const isWhiteTurn = turn === "white";
   
+  if (game.halfMoveClock >= 100) {
+    console.log(`🤝 DRAW! Fifty-move rule.`);
+    return { status: "draw", reason: "fifty-move rule" };
+  }
+
+  const pieces = [];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c]) pieces.push(board[r][c].toLowerCase());
+    }
+  }
+  
+  const pCount = pieces.length;
+  if (pCount === 2) {
+    return { status: "draw", reason: "insufficient material" };
+  } else if (pCount === 3) {
+    if (pieces.includes("n") || pieces.includes("b")) {
+      return { status: "draw", reason: "insufficient material" };
+    }
+  }
+
   const inCheck = isInCheck(board, isWhiteTurn);
   const hasMovesAvailable = hasLegalMoves(board, isWhiteTurn, game);
   
@@ -537,6 +558,14 @@ const handleMove = (socket, data) => {
   const pieceType = getPieceType(piece);
   let capturedPiece = game.board[tr][tc];
   let promoted = false;
+  let promotedTo = null;
+
+  game.lastActivity = Date.now();
+  if (pieceType === "p" || capturedPiece) {
+    game.halfMoveClock = 0;
+  } else {
+    game.halfMoveClock++;
+  }
 
   // Special en passant capture
   if (pieceType === "p" && game.enPassantTarget && tr === game.enPassantTarget[0] && tc === game.enPassantTarget[1] && sc !== tc) {
@@ -578,6 +607,7 @@ const handleMove = (socket, data) => {
 
       game.board[tr][tc] = isWhite ? chosen : chosen.toLowerCase();
       promoted = true;
+      promotedTo = isWhite ? chosen : chosen.toLowerCase();
       console.log(`♛ PAWN PROMOTED to ${chosen} at [${tr},${tc}]`);
     }
 
@@ -626,16 +656,22 @@ const handleMove = (socket, data) => {
       from: [sr, sc],
       to: [tr, tc],
       captured: capturedPiece || null,
-      promotedTo: promoted ? (isWhite ? String(data.promotion || "Q").toUpperCase().trim().replace(/[^QRBN]/g, "") || "Q" : String(data.promotion || "q").toUpperCase().trim().replace(/[^QRBN]/g, "Q") && String(data.promotion || "Q").toUpperCase().trim().replace(/[^QRBN]/g, "Q").toLowerCase()) : null,
-
+      promotedTo: promotedTo,
       at: Date.now()
     });
     game.history.boards.push(deepCloneBoard(game.board));
 
-    if (game.history.moves.length > MAX_HISTORY) game.history.moves.shift();
-    if (game.history.boards.length > MAX_HISTORY) game.history.boards.shift();
+    if (game.history.moves.length > MAX_HISTORY) {
+      game.history.moves.shift();
+      game.history.boards.shift();
+    }
   }
 
+  const stateKey = JSON.stringify({b: game.board, t: game.turn, c: game.castling, e: game.enPassantTarget});
+  game.positionCounts[stateKey] = (game.positionCounts[stateKey] || 0) + 1;
+  if (game.positionCounts[stateKey] >= 3) {
+    game.manualStatus = { status: "draw", reason: "threefold repetition" };
+  }
 
   console.log(`✅ MOVE accepted: ${piece} from [${sr},${sc}] to [${tr},${tc}]${capturedPiece ? ` (captured ${capturedPiece})` : ""}${promoted ? " [PROMOTED]" : ""}`);
   
@@ -734,6 +770,9 @@ io.on("connection", (socket) => {
         drawOfferFrom: null,
         capturedWhite: [],
         capturedBlack: [],
+        halfMoveClock: 0,
+        positionCounts: {},
+        lastActivity: Date.now(),
         castling: {
           white: { kingside: true, queenside: true },
           black: { kingside: true, queenside: true }
@@ -770,9 +809,10 @@ io.on("connection", (socket) => {
       return;
     }
 
+    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white === socket.id ? "white" :
-      game.players.black === socket.id ? "black" : null;
+      game.players.white?.socketId === socket.id ? "white" :
+      game.players.black?.socketId === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("resignRejected", { reason: "You are not part of this game" });
@@ -799,9 +839,10 @@ io.on("connection", (socket) => {
       return;
     }
 
+    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white === socket.id ? "white" :
-      game.players.black === socket.id ? "black" : null;
+      game.players.white?.socketId === socket.id ? "white" :
+      game.players.black?.socketId === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("drawOfferRejected", { reason: "You are not part of this game" });
@@ -836,9 +877,10 @@ io.on("connection", (socket) => {
       return;
     }
 
+    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white === socket.id ? "white" :
-      game.players.black === socket.id ? "black" : null;
+      game.players.white?.socketId === socket.id ? "white" :
+      game.players.black?.socketId === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("drawResponseRejected", { reason: "You are not part of this game" });
@@ -891,9 +933,10 @@ io.on("connection", (socket) => {
       return;
     }
 
+    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white === socket.id ? "white" :
-      game.players.black === socket.id ? "black" : null;
+      game.players.white?.socketId === socket.id ? "white" :
+      game.players.black?.socketId === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("powerRejected", { reason: "You are not part of this game" });
@@ -1008,8 +1051,10 @@ io.on("connection", (socket) => {
     decrementFrozenForColor(game, playerColor);
     game.turn = game.turn === "white" ? "black" : "white";
     game.drawOfferFrom = null;
+    game.halfMoveClock++;
 
     if (game.history) {
+      const MAX_HISTORY = 200;
       game.history.moves.push({
         kind: "power",
         by: playerColor,
@@ -1018,6 +1063,17 @@ io.on("connection", (socket) => {
         at: Date.now()
       });
       game.history.boards.push(deepCloneBoard(game.board));
+
+      if (game.history.moves.length > MAX_HISTORY) {
+        game.history.moves.shift();
+        game.history.boards.shift();
+      }
+    }
+
+    const stateKey = JSON.stringify({b: game.board, t: game.turn, c: game.castling, e: game.enPassantTarget});
+    game.positionCounts[stateKey] = (game.positionCounts[stateKey] || 0) + 1;
+    if (game.positionCounts[stateKey] >= 3) {
+      game.manualStatus = { status: "draw", reason: "threefold repetition" };
     }
 
     socket.emit("powerConfirmed", { type, target: [tr, tc] });
@@ -1031,6 +1087,20 @@ io.on("connection", (socket) => {
     removeSocketFromAllQueues(socket.id);
   });
 });
+
+setInterval(() => {
+  const now = Date.now();
+  for (const room in rooms) {
+    const game = rooms[room];
+    const isOver = Boolean(game.manualStatus) || ["checkmate", "stalemate", "draw", "resigned"].includes(getGameStatus(game.board, game.turn, game).status);
+    const inactiveMs = now - (game.lastActivity || now);
+    
+    if (inactiveMs > 60 * 60 * 1000 || (isOver && inactiveMs > 5 * 60 * 1000)) {
+      console.log(`🧹 Garbage collecting room: ${room}`);
+      delete rooms[room];
+    }
+  }
+}, 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
