@@ -401,28 +401,26 @@ const socket = io();
 // Attempt match reconnect after refresh (if we have a token stored).
 try {
   const saved = localStorage.getItem("chess_reconnect");
-if (saved) {
+  if (saved) {
     const parsed = JSON.parse(saved);
     if (parsed?.room && parsed?.token) {
       socket.emit("reconnect", { room: parsed.room, token: parsed.token });
-
-      // Reset transient UI immediately to avoid sending/playing with stale state.
-      // Important: declare these variables are managed after definition as well.
-      // (They will be re-assigned defaults below.)
-      moveInFlight = false;
-      pendingPower = null;
-      selected = null;
-      validMoves = [];
     }
   }
-
 } catch (e) {
   // ignore
 }
 
-// Track last known server turn to prevent client from sending moves multiple times
-// during the reconnect handshake.
-let lastServerTurn = null;
+// Reset transient UI to a known state on every load.
+// Prevents the first player from acting with stale UI state after refresh.
+// NOTE: moveInFlight is already declared later in the file; avoid redeclaration.
+selected = null;
+validMoves = [];
+pendingPower = null;
+
+
+
+
 
 
 
