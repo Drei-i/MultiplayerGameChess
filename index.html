@@ -363,19 +363,20 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
   </div>
 </div>
 
-<div class="game-area">
-  <div class="capture-column">
+<div class="game-area" style="display:flex;">
+  <div class="capture-column" style="display:none;">
     <div class="capture-title">White captured</div>
     <div id="whiteCaptured" class="capture-pieces"></div>
   </div>
   <div class="board-wrapper">
     <div class="board" id="board"></div>
   </div>
-  <div class="capture-column">
+  <div class="capture-column" style="display:none;">
     <div class="capture-title">Black captured</div>
     <div id="blackCaptured" class="capture-pieces"></div>
   </div>
 </div>
+
 
 <div class="below-board-panel" id="belowBoardActions">
   <div class="control-group" id="gameActions">
@@ -964,18 +965,15 @@ function render() {
 function renderCaptured() {
   if (!whiteCapturedEl || !blackCapturedEl) return;
 
-  // Per UI request: during queue/lobby, hide captured panels (board only).
   const inGame = Boolean(room && myColor);
-  const gameArea = document.querySelector('.game-area');
-  if (gameArea) gameArea.style.display = 'flex';
 
-  // Hide the captured columns when not in a match.
+  // Show captured columns only during active match
   const captureColumns = document.querySelectorAll('.capture-column');
-  captureColumns.forEach((el, idx) => {
-    // idx 0 = white captured, idx 1 = black captured
+  captureColumns.forEach((el) => {
     el.style.display = inGame ? 'flex' : 'none';
   });
 
+  // Keep board visible; this function is only about captured pieces.
   whiteCapturedEl.innerHTML = "";
   blackCapturedEl.innerHTML = "";
 
@@ -1023,7 +1021,7 @@ function updateGameActions() {
   offerDrawBtnEl.disabled = !enabled;
   resignBtnEl.disabled = !enabled;
 
-  // Per UI request: hide draw/resign actions until match is started
+  // Lobby/queue: hide draw/resign panel entirely
   belowBoardActionsEl.style.display = inGame ? "flex" : "none";
 }
 
