@@ -1,0 +1,6 @@
+- [ ] Update server.js: accept promotion choice (Q/R/B/N) from move payload; validate and apply on last-rank.
+- [ ] Update index.html: when a pawn move lands on last rank, pause after sending move (or send a follow-up) and show a modal to choose promotion piece.
+- [ ] Update index.html: send chosen promotion piece to server with the move.
+- [ ] Update move confirmation handling/logging to show chosen piece.
+- [ ] Local test: play pawn to last rank, ensure modal shows and promotion works.
+- [ ] Deploy test on Render.
