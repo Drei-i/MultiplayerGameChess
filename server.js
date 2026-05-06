@@ -494,9 +494,9 @@ const handleMove = (socket, data) => {
     return;
   }
 
-  const playerColor =
-    game.players.white === socket.id ? "white" :
-    game.players.black === socket.id ? "black" : null;
+    const playerColor =
+    game.players.white?.socketId === socket.id ? "white" :
+    game.players.black?.socketId === socket.id ? "black" : null;
 
   if (!playerColor) {
     console.log("❌ MOVE rejected: player not in game");
