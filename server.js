@@ -127,6 +127,7 @@ const emitGameUpdate = (room) => {
   }
 
   io.to(room).emit("update", basePayload);
+
 };
 
 // =========================
@@ -685,9 +686,10 @@ io.on("connection", (socket) => {
         board: START_BOARD(),
         turn: "white",
         players: {
-          white: whiteEntry.socketId,
-          black: blackEntry.socketId
+          white: { socketId: whiteEntry.socketId, reconnectToken: null },
+          black: { socketId: blackEntry.socketId, reconnectToken: null }
         },
+
         history: {
           boards: [deepCloneBoard(START_BOARD())],
           moves: []
