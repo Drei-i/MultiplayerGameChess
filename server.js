@@ -669,8 +669,12 @@ io.on("connection", (socket) => {
     socket.join(room);
     // Re-send start + current game snapshot.
     socket.emit("start", { color: playerColor, room, mode: game.mode, token });
+
+    // Reset transient client/UI state by pushing the authoritative server state.
+    // IMPORTANT: do NOT change game.turn here; refresh must not affect whose turn it is.
     emitGameUpdate(room);
   });
+
 
 
   socket.on("queue", (data = {}) => {
