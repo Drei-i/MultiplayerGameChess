@@ -963,7 +963,25 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
 }
 
 function render() {
-  if (!board) return;
+  if (!board) {
+    // Lobby/open window: show a preview board immediately.
+    // This matches START_BOARD() layout from the server.
+    board = [
+      ["r","n","b","q","k","b","n","r"],
+      ["p","p","p","p","p","p","p","p"],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["P","P","P","P","P","P","P","P"],
+      ["R","N","B","Q","K","B","N","R"]
+    ];
+    turn = "white";
+    selected = null;
+    validMoves = [];
+    // board is now preview; keep controls hidden until match start
+    return renderBoard(boardEl, board, { interactive: false });
+  }
   renderBoard(boardEl, board, { interactive: true });
 }
 
