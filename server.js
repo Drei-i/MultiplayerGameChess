@@ -609,6 +609,8 @@ const handleMove = (socket, data) => {
   game.drawOfferFrom = null;
 
   if (game.history) {
+    const MAX_HISTORY = 200;
+
     game.history.moves.push({
       kind: "move",
       by: playerColor,
@@ -620,7 +622,11 @@ const handleMove = (socket, data) => {
       at: Date.now()
     });
     game.history.boards.push(deepCloneBoard(game.board));
+
+    if (game.history.moves.length > MAX_HISTORY) game.history.moves.shift();
+    if (game.history.boards.length > MAX_HISTORY) game.history.boards.shift();
   }
+
 
   console.log(`✅ MOVE accepted: ${piece} from [${sr},${sc}] to [${tr},${tc}]${capturedPiece ? ` (captured ${capturedPiece})` : ""}${promoted ? " [PROMOTED]" : ""}`);
   

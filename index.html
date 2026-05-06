@@ -449,6 +449,7 @@ let capturedBlack = [];
 let mode = null;
 let isQueued = false;
 let pendingPower = null; // "freeze" | "teleport" | "swap"
+let moveInFlight = false; // prevent duplicate rapid sends
 let modalOnPrimary = null;
 let modalOnSecondary = null;
 let matchHistory = { boards: [], moves: [] };
@@ -707,10 +708,12 @@ socket.on("update", (d) => {
 });
 
 socket.on("moveConfirmed", (d) => {
+  moveInFlight = false;
   log(`✅ Move confirmed: [${d.from}] → [${d.to}]${d.captured ? ` (captured ${d.captured})` : ""}${d.promoted ? " [PAWN PROMOTED]" : ""}`, "success");
 });
 
 socket.on("moveRejected", (d) => {
+  moveInFlight = false;
   log(`❌ Move rejected: ${d.reason}`, "error");
   selected = null;
   validMoves = [];
@@ -718,12 +721,15 @@ socket.on("moveRejected", (d) => {
 });
 
 socket.on("powerConfirmed", (d) => {
+  moveInFlight = false;
   log(`✨ Power confirmed: ${String(d.type).toUpperCase()} at [${d.target}]`, "success");
 });
 
 socket.on("powerRejected", (d) => {
+  moveInFlight = false;
   log(`❌ Power rejected: ${d.reason}`, "error");
 });
+
 
 socket.on("drawOfferSent", () => {
   log("🤝 Draw offer sent. Waiting for opponent...", "info");
@@ -777,7 +783,15 @@ socket.on("error", (error) => {
 // =========================
 // MOVE
 // =========================
+function canSendActions() {
+  return Boolean(room && myColor);
+}
+
 function sendMove(fr, fc, tr, tc) {
+  if (!canSendActions()) return;
+  if (moveInFlight) return;
+
+  moveInFlight = true;
   log(`📤 Sending move: [${fr},${fc}] → [${tr},${tc}]`, "info");
 
   socket.emit("move", {
@@ -788,7 +802,10 @@ function sendMove(fr, fc, tr, tc) {
 }
 
 function sendPower(type, tr, tc) {
-  if (!room) return;
+  if (!canSendActions()) return;
+  if (moveInFlight) return;
+
+  moveInFlight = true;
   log(`📤 Sending power: ${type.toUpperCase()} → [${tr},${tc}]`, "info");
   socket.emit("kingPower", {
     room,
@@ -796,6 +813,7 @@ function sendPower(type, tr, tc) {
     target: [tr, tc]
   });
 }
+
 
 // =========================
 // RENDER
@@ -1233,22 +1251,28 @@ cancelQueueBtnEl.addEventListener("click", () => {
 });
 
 powerFreezeBtnEl.addEventListener("click", () => {
+  if (!canSendActions()) return;
   pendingPower = "freeze";
   log("Freeze selected. Click an enemy piece to freeze it for 1 turn.", "info");
   render();
 });
 
+
 powerTeleportBtnEl.addEventListener("click", () => {
+  if (!canSendActions()) return;
   pendingPower = "teleport";
   log("Teleport selected. Click an empty square that is not protected by the enemy.", "info");
   render();
 });
 
+
 powerSwapBtnEl.addEventListener("click", () => {
+  if (!canSendActions()) return;
   pendingPower = "swap";
   log("Swap selected. Click a friendly (non-king) piece to swap with your king.", "info");
   render();
 });
+
 
 powerCancelBtnEl.addEventListener("click", () => {
   pendingPower = null;
@@ -1257,6 +1281,18 @@ powerCancelBtnEl.addEventListener("click", () => {
 });
 
 statusEl.textContent = "Pick a mode and press Queue.";
+
+// Guaranteed initial render (opening/lobby window)
+// Shows the starting board immediately and keeps captured/actions hidden.
+try {
+  boardEl.style.display = 'block';
+  boardEl.style.visibility = 'visible';
+  render();
+  renderCaptured();
+  belowBoardActionsEl.style.display = 'none';
+} catch (e) {
+  console.warn('Initial render failed', e);
+}
 </script>
 
 </body>
