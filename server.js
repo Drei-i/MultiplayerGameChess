@@ -8,7 +8,18 @@ app.use(express.static(__dirname));
 // =========================
 // MATCHMAKING
 // =========================
-let waiting = null;
+const GAME_MODES = {
+  REGULAR: "regular",
+  POWERED_KING: "powered-king",
+  FOG_OF_WAR: "fog-of-war"
+};
+
+const queues = {
+  [GAME_MODES.REGULAR]: [],
+  [GAME_MODES.POWERED_KING]: [],
+  [GAME_MODES.FOG_OF_WAR]: []
+};
+
 let rooms = {};
 
 const START_BOARD = () => ([
@@ -23,6 +34,100 @@ const START_BOARD = () => ([
 ]);
 
 const clone = b => b.map(r => [...r]);
+
+const deepCloneBoard = (b) => clone(b);
+
+const normalizeMode = (mode) => {
+  if (!mode) return null;
+  const m = String(mode).toLowerCase().trim();
+  if (m === GAME_MODES.REGULAR) return GAME_MODES.REGULAR;
+  if (m === GAME_MODES.POWERED_KING) return GAME_MODES.POWERED_KING;
+  if (m === GAME_MODES.FOG_OF_WAR) return GAME_MODES.FOG_OF_WAR;
+  return null;
+};
+
+const removeSocketFromAllQueues = (socketId) => {
+  for (const mode of Object.keys(queues)) {
+    const q = queues[mode];
+    const idx = q.findIndex(e => e.socketId === socketId);
+    if (idx !== -1) q.splice(idx, 1);
+  }
+};
+
+const getOpponentColor = (color) => (color === "white" ? "black" : "white");
+
+const isKingPiece = (piece) => getPieceType(piece) === "k";
+
+const coordKey = (r, c) => `${r},${c}`;
+
+const decrementFrozenForColor = (game, color) => {
+  if (!game.poweredKing?.frozen?.[color]) return;
+  const map = game.poweredKing.frozen[color];
+  for (const k of Object.keys(map)) {
+    map[k] -= 1;
+    if (map[k] <= 0) delete map[k];
+  }
+};
+
+const isFrozenAt = (game, color, r, c) => {
+  const key = coordKey(r, c);
+  return Boolean(game.poweredKing?.frozen?.[color]?.[key] > 0);
+};
+
+const buildFogBoardForColor = (board, color) => {
+  const isWhite = color === "white";
+  const visible = Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => false));
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (!piece) continue;
+      if (!isFriendlyPiece(piece, isWhite)) continue;
+
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr < 0 || nr > 7 || nc < 0 || nc > 7) continue;
+          visible[nr][nc] = true;
+        }
+      }
+    }
+  }
+
+  const masked = clone(board);
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (!visible[r][c]) masked[r][c] = "";
+    }
+  }
+  return masked;
+};
+
+const emitGameUpdate = (room) => {
+  const game = rooms[room];
+  if (!game) return;
+
+  const computedStatus = getGameStatus(game.board, game.turn, game);
+  const gameStatus = game.manualStatus ? game.manualStatus : computedStatus;
+
+  const basePayload = {
+    ...game,
+    gameStatus
+  };
+
+  if (game.mode === GAME_MODES.FOG_OF_WAR) {
+    for (const color of ["white", "black"]) {
+      const socketId = game.players[color];
+      if (!socketId) continue;
+      const fogBoard = buildFogBoardForColor(game.board, color);
+      io.to(socketId).emit("update", { ...basePayload, board: fogBoard });
+    }
+    return;
+  }
+
+  io.to(room).emit("update", basePayload);
+};
 
 // =========================
 // CHESS RULES
@@ -359,6 +464,12 @@ const handleMove = (socket, data) => {
     return;
   }
 
+  if (game.manualStatus) {
+    console.log("❌ MOVE rejected: game already ended");
+    socket.emit("moveRejected", { reason: "Game is already over" });
+    return;
+  }
+
   const [sr, sc] = data.from;
   const [tr, tc] = data.to;
 
@@ -400,6 +511,12 @@ const handleMove = (socket, data) => {
   }
 
   const isWhite = playerColor === "white";
+
+  if (game.mode === GAME_MODES.POWERED_KING && isFrozenAt(game, playerColor, sr, sc)) {
+    console.log("❌ MOVE rejected: selected piece is frozen");
+    socket.emit("moveRejected", { reason: "That piece is frozen for this turn" });
+    return;
+  }
 
   // Check if piece belongs to player
   if (isFriendlyPiece(piece, isWhite)) {
@@ -485,26 +602,33 @@ const handleMove = (socket, data) => {
   }
 
   // Switch turn
+  if (game.mode === GAME_MODES.POWERED_KING) {
+    decrementFrozenForColor(game, playerColor);
+  }
   game.turn = game.turn === "white" ? "black" : "white";
+  game.drawOfferFrom = null;
 
-  // Get game status
-  const gameStatus = getGameStatus(game.board, game.turn, game);
+  if (game.history) {
+    game.history.moves.push({
+      kind: "move",
+      by: playerColor,
+      piece,
+      from: [sr, sc],
+      to: [tr, tc],
+      captured: capturedPiece || null,
+      promotedTo: promoted ? (isWhite ? "Q" : "q") : null,
+      at: Date.now()
+    });
+    game.history.boards.push(deepCloneBoard(game.board));
+  }
 
   console.log(`✅ MOVE accepted: ${piece} from [${sr},${sc}] to [${tr},${tc}]${capturedPiece ? ` (captured ${capturedPiece})` : ""}${promoted ? " [PROMOTED]" : ""}`);
-  
-  if (gameStatus.status === "check") {
-    console.log(`   ⚠️  ${game.turn.toUpperCase()} is in CHECK - must escape!`);
-  } else if (gameStatus.status === "checkmate") {
-    console.log(`   🏁 CHECKMATE! ${gameStatus.winner.toUpperCase()} WINS!`);
-  } else if (gameStatus.status === "stalemate") {
-    console.log(`   🤝 STALEMATE - Game is a draw`);
-  }
   
   // Emit successful move to requesting player
   socket.emit("moveConfirmed", { from: [sr, sc], to: [tr, tc], captured: capturedPiece, promoted });
 
-  // Broadcast update to room with game status
-  io.to(data.room).emit("update", { ...game, gameStatus });
+  // Emit updated game state
+  emitGameUpdate(data.room);
 };
 
 io.on("connection", (socket) => {
@@ -514,49 +638,352 @@ io.on("connection", (socket) => {
   // Register move handler for this socket
   socket.on("move", (data) => handleMove(socket, data));
 
-  socket.on("disconnect", () => {
-    console.log("🔴 disconnected:", socket.id);
+  socket.on("queue", (data = {}) => {
+    const mode = normalizeMode(data.mode);
+    if (!mode) {
+      socket.emit("queueRejected", { reason: "Invalid mode" });
+      return;
+    }
+
+    removeSocketFromAllQueues(socket.id);
+
+    const entry = { socketId: socket.id, queuedAt: Date.now() };
+    queues[mode].push(entry);
+
+    socket.emit("queued", {
+      mode,
+      position: queues[mode].length
+    });
+
+    // Try to match immediately if possible.
+    if (queues[mode].length >= 2) {
+      const a = queues[mode].shift();
+      const b = queues[mode].shift();
+
+      const p1 = io.sockets.sockets.get(a.socketId);
+      const p2 = io.sockets.sockets.get(b.socketId);
+      if (!p1 || !p2) {
+        if (p1) queues[mode].unshift(a);
+        if (p2) queues[mode].unshift(b);
+        return;
+      }
+
+      // White = queued earlier.
+      const whiteEntry = a.queuedAt <= b.queuedAt ? a : b;
+      const blackEntry = whiteEntry === a ? b : a;
+
+      const room = "room-" + Date.now();
+
+      const game = {
+        mode,
+        board: START_BOARD(),
+        turn: "white",
+        players: {
+          white: whiteEntry.socketId,
+          black: blackEntry.socketId
+        },
+        history: {
+          boards: [deepCloneBoard(START_BOARD())],
+          moves: []
+        },
+        manualStatus: null,
+        drawOfferFrom: null,
+        capturedWhite: [],
+        capturedBlack: [],
+        castling: {
+          white: { kingside: true, queenside: true },
+          black: { kingside: true, queenside: true }
+        },
+        enPassantTarget: null,
+        poweredKing: mode === GAME_MODES.POWERED_KING ? {
+          swapsLeft: { white: 5, black: 5 },
+          frozen: { white: {}, black: {} }
+        } : null
+      };
+
+      rooms[room] = game;
+
+      p1.join(room);
+      p2.join(room);
+
+      io.to(whiteEntry.socketId).emit("start", { color: "white", room, mode });
+      io.to(blackEntry.socketId).emit("start", { color: "black", room, mode });
+
+      emitGameUpdate(room);
+    }
   });
 
-  // pair players
-  if (!waiting) {
-    waiting = socket;
-    socket.emit("waiting");
-    return;
-  }
+  socket.on("cancelQueue", () => {
+    removeSocketFromAllQueues(socket.id);
+    socket.emit("queueCancelled");
+  });
 
-  const p1 = waiting;
-  const p2 = socket;
-  waiting = null;
+  socket.on("resign", (data = {}) => {
+    const room = data.room;
+    const game = rooms[room];
+    if (!game) {
+      socket.emit("resignRejected", { reason: "Room not found" });
+      return;
+    }
 
-  const room = "room-" + Date.now();
+    const playerColor =
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
 
-  const game = {
-    board: START_BOARD(),
-    turn: "white",
-    players: {
-      white: p1.id,
-      black: p2.id
-    },
-    capturedWhite: [],
-    capturedBlack: [],
-    castling: {
-      white: { kingside: true, queenside: true },
-      black: { kingside: true, queenside: true }
-    },
-    enPassantTarget: null
-  };
+    if (!playerColor) {
+      socket.emit("resignRejected", { reason: "You are not part of this game" });
+      return;
+    }
 
-  rooms[room] = game;
+    if (game.manualStatus) {
+      socket.emit("resignRejected", { reason: "Game is already over" });
+      return;
+    }
 
-  p1.join(room);
-  p2.join(room);
+    game.manualStatus = { status: "resigned", winner: getOpponentColor(playerColor) };
+    game.drawOfferFrom = null;
 
-  p1.emit("start", { color: "white", room });
-  p2.emit("start", { color: "black", room });
+    socket.emit("resignConfirmed");
+    emitGameUpdate(room);
+  });
 
-  const gameStatus = getGameStatus(game.board, game.turn, game);
-  io.to(room).emit("update", { ...game, gameStatus });
+  socket.on("offerDraw", (data = {}) => {
+    const room = data.room;
+    const game = rooms[room];
+    if (!game) {
+      socket.emit("drawOfferRejected", { reason: "Room not found" });
+      return;
+    }
+
+    const playerColor =
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
+
+    if (!playerColor) {
+      socket.emit("drawOfferRejected", { reason: "You are not part of this game" });
+      return;
+    }
+
+    if (game.manualStatus) {
+      socket.emit("drawOfferRejected", { reason: "Game is already over" });
+      return;
+    }
+
+    if (game.drawOfferFrom) {
+      socket.emit("drawOfferRejected", { reason: "There is already a pending draw offer" });
+      return;
+    }
+
+    game.drawOfferFrom = playerColor;
+    socket.emit("drawOfferSent");
+
+    const oppColor = getOpponentColor(playerColor);
+    const oppSocketId = game.players[oppColor];
+    if (oppSocketId) {
+      io.to(oppSocketId).emit("drawOffered", { from: playerColor });
+    }
+  });
+
+  socket.on("respondDraw", (data = {}) => {
+    const room = data.room;
+    const game = rooms[room];
+    if (!game) {
+      socket.emit("drawResponseRejected", { reason: "Room not found" });
+      return;
+    }
+
+    const playerColor =
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
+
+    if (!playerColor) {
+      socket.emit("drawResponseRejected", { reason: "You are not part of this game" });
+      return;
+    }
+
+    if (game.manualStatus) {
+      socket.emit("drawResponseRejected", { reason: "Game is already over" });
+      return;
+    }
+
+    if (!game.drawOfferFrom) {
+      socket.emit("drawResponseRejected", { reason: "There is no pending draw offer" });
+      return;
+    }
+
+    // Only the non-offering player can respond.
+    if (game.drawOfferFrom === playerColor) {
+      socket.emit("drawResponseRejected", { reason: "Waiting for opponent response" });
+      return;
+    }
+
+    const accept = Boolean(data.accept);
+    const offererColor = game.drawOfferFrom;
+    const offererSocketId = game.players[offererColor];
+    game.drawOfferFrom = null;
+
+    if (accept) {
+      game.manualStatus = { status: "draw" };
+      socket.emit("drawAccepted");
+      if (offererSocketId) io.to(offererSocketId).emit("drawAccepted");
+      emitGameUpdate(room);
+      return;
+    }
+
+    socket.emit("drawRejected");
+    if (offererSocketId) io.to(offererSocketId).emit("drawRejected");
+  });
+
+  socket.on("kingPower", (data = {}) => {
+    const room = data.room;
+    const game = rooms[room];
+    if (!game) {
+      socket.emit("powerRejected", { reason: "Room not found" });
+      return;
+    }
+
+    if (game.mode !== GAME_MODES.POWERED_KING) {
+      socket.emit("powerRejected", { reason: "This mode does not support king powers" });
+      return;
+    }
+
+    const playerColor =
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
+
+    if (!playerColor) {
+      socket.emit("powerRejected", { reason: "You are not part of this game" });
+      return;
+    }
+
+    if (game.manualStatus) {
+      socket.emit("powerRejected", { reason: "Game is already over" });
+      return;
+    }
+
+    if (playerColor !== game.turn) {
+      socket.emit("powerRejected", { reason: `It is ${game.turn}'s turn` });
+      return;
+    }
+
+    const isWhite = playerColor === "white";
+    const opponentColor = getOpponentColor(playerColor);
+
+    const type = String(data.type || "").toLowerCase().trim();
+    const target = Array.isArray(data.target) ? data.target : null;
+    if (!target || target.length !== 2) {
+      socket.emit("powerRejected", { reason: "Invalid target" });
+      return;
+    }
+    const [tr, tc] = target;
+    if (!Number.isInteger(tr) || !Number.isInteger(tc) || tr < 0 || tr > 7 || tc < 0 || tc > 7) {
+      socket.emit("powerRejected", { reason: "Target out of bounds" });
+      return;
+    }
+
+    const kingPos = findKing(game.board, isWhite);
+    if (!kingPos) {
+      socket.emit("powerRejected", { reason: "King not found" });
+      return;
+    }
+    const [kr, kc] = kingPos;
+
+    if (type === "freeze") {
+      const victim = game.board[tr][tc];
+      if (!victim || !isEnemyPiece(victim, isWhite)) {
+        socket.emit("powerRejected", { reason: "You must target an enemy piece" });
+        return;
+      }
+      if (isKingPiece(victim)) {
+        socket.emit("powerRejected", { reason: "You cannot freeze the enemy king" });
+        return;
+      }
+      game.poweredKing.frozen[opponentColor][coordKey(tr, tc)] = 1;
+    } else if (type === "teleport") {
+      if (game.board[tr][tc]) {
+        socket.emit("powerRejected", { reason: "Teleport must target an empty square" });
+        return;
+      }
+
+      // "Unprotected" = not attacked by enemy pieces.
+      if (isSquareAttacked(game.board, tr, tc, !isWhite)) {
+        socket.emit("powerRejected", { reason: "That square is protected by the enemy" });
+        return;
+      }
+
+      const testBoard = clone(game.board);
+      testBoard[tr][tc] = testBoard[kr][kc];
+      testBoard[kr][kc] = "";
+      if (isInCheck(testBoard, isWhite)) {
+        socket.emit("powerRejected", { reason: "Teleport would leave your king in check" });
+        return;
+      }
+
+      game.board[tr][tc] = game.board[kr][kc];
+      game.board[kr][kc] = "";
+      game.castling[playerColor].kingside = false;
+      game.castling[playerColor].queenside = false;
+    } else if (type === "swap") {
+      const swapsLeft = game.poweredKing?.swapsLeft?.[playerColor] ?? 0;
+      if (swapsLeft <= 0) {
+        socket.emit("powerRejected", { reason: "No swaps remaining" });
+        return;
+      }
+
+      const ally = game.board[tr][tc];
+      if (!ally || !isFriendlyPiece(ally, isWhite)) {
+        socket.emit("powerRejected", { reason: "You must target an allied piece" });
+        return;
+      }
+      if (isKingPiece(ally)) {
+        socket.emit("powerRejected", { reason: "You must target a non-king allied piece" });
+        return;
+      }
+
+      const testBoard = clone(game.board);
+      const kingPiece = testBoard[kr][kc];
+      testBoard[kr][kc] = ally;
+      testBoard[tr][tc] = kingPiece;
+      if (isInCheck(testBoard, isWhite)) {
+        socket.emit("powerRejected", { reason: "Swap would leave your king in check" });
+        return;
+      }
+
+      const kingPiece2 = game.board[kr][kc];
+      game.board[kr][kc] = ally;
+      game.board[tr][tc] = kingPiece2;
+      game.poweredKing.swapsLeft[playerColor] -= 1;
+      game.castling[playerColor].kingside = false;
+      game.castling[playerColor].queenside = false;
+    } else {
+      socket.emit("powerRejected", { reason: "Unknown power type" });
+      return;
+    }
+
+    // Using a power consumes the turn.
+    decrementFrozenForColor(game, playerColor);
+    game.turn = game.turn === "white" ? "black" : "white";
+    game.drawOfferFrom = null;
+
+    if (game.history) {
+      game.history.moves.push({
+        kind: "power",
+        by: playerColor,
+        power: type,
+        target: [tr, tc],
+        at: Date.now()
+      });
+      game.history.boards.push(deepCloneBoard(game.board));
+    }
+
+    socket.emit("powerConfirmed", { type, target: [tr, tc] });
+    emitGameUpdate(room);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("🔴 disconnected:", socket.id);
+    removeSocketFromAllQueues(socket.id);
+  });
 });
 
 http.listen(3000, () => {

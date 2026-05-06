@@ -23,6 +23,90 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+.top-panel {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(82, 92, 74, 0.16);
+  border-radius: 18px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 24px rgba(31, 58, 32, 0.12);
+}
+
+.below-board-panel {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(82, 92, 74, 0.16);
+  border-radius: 18px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 24px rgba(31, 58, 32, 0.12);
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4e644a;
+}
+
+select, button {
+  font-family: inherit;
+}
+
+select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(82, 92, 74, 0.22);
+  background: white;
+  min-width: 220px;
+}
+
+button {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(82, 92, 74, 0.22);
+  background: #f7faf3;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+
+button:hover { background: #eff6e8; }
+button:active { transform: translateY(1px); }
+button[disabled] { opacity: 0.6; cursor: not-allowed; }
+
+.power-panel {
+  display: none;
+}
+
+.power-panel.active {
+  display: flex;
+}
+
+.pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(39, 45, 33, 0.08);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
 .container {
   display: flex;
   flex-direction: column;
@@ -110,6 +194,11 @@ h1 {
   text-shadow: 0 0 1px rgba(255,255,255,0.2);
 }
 
+.piece-king {
+  color: #c01818 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.22), 0 0 10px rgba(192, 24, 24, 0.35) !important;
+}
+
 .square {
   width:72px;
   height:72px;
@@ -193,7 +282,87 @@ h1 {
 <body>
 
 <h1>♔ Chess Multiplayer ♚</h1>
+<div class="top-panel">
+  <div class="control-group" id="lobbyControls">
+    <div class="label">Mode</div>
+    <select id="modeSelect">
+      <option value="regular">Regular Chess</option>
+      <option value="powered-king">Powered King Chess</option>
+      <option value="fog-of-war">Fog of War Chess</option>
+    </select>
+    <button id="queueBtn">Queue</button>
+    <button id="cancelQueueBtn" disabled>Cancel</button>
+  </div>
+  <div class="control-group power-panel" id="powerPanel">
+    <div class="label">King Powers</div>
+    <button id="powerFreezeBtn">Freeze</button>
+    <button id="powerTeleportBtn">Teleport</button>
+    <button id="powerSwapBtn">Swap</button>
+    <button id="powerCancelBtn">Cancel</button>
+    <span class="pill" id="swapsLeftPill">Swaps left: 5</span>
+  </div>
+</div>
 <h3 id="status">Loading...</h3>
+
+<div id="modalOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; padding:18px; z-index:1000;">
+  <div style="width:min(520px, 100%); background:rgba(255,255,255,0.98); border:1px solid rgba(82, 92, 74, 0.18); border-radius:18px; padding:16px 16px; box-shadow:0 24px 60px rgba(0,0,0,0.22);">
+    <div style="font-weight:900; font-size:1.05rem; margin-bottom:8px;" id="modalTitle">Confirm</div>
+    <div style="color:#2d3b2f; margin-bottom:14px; line-height:1.35;" id="modalMessage"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button id="modalSecondaryBtn">Cancel</button>
+      <button id="modalPrimaryBtn">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="endOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.38); align-items:center; justify-content:center; padding:18px; z-index:1100;">
+  <div style="width:min(560px, 100%); background:rgba(255,255,255,0.98); border:1px solid rgba(82, 92, 74, 0.18); border-radius:18px; padding:16px 16px; box-shadow:0 24px 60px rgba(0,0,0,0.22);">
+    <div style="font-weight:900; font-size:1.15rem; margin-bottom:8px;" id="endTitle">Match ended</div>
+    <div style="color:#2d3b2f; margin-bottom:14px; line-height:1.35;" id="endMessage"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end; margin-bottom:12px;">
+      <button id="reviewMatchBtn">Review match</button>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
+      <div style="display:flex; gap:10px; align-items:center;">
+        <div class="label" style="margin-right:2px;">Mode</div>
+        <select id="endModeSelect">
+          <option value="regular">Regular Chess</option>
+          <option value="powered-king">Powered King Chess</option>
+          <option value="fog-of-war">Fog of War Chess</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button id="endLobbyBtn">Lobby</button>
+        <button id="endRequeueBtn">Requeue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="reviewOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); align-items:center; justify-content:center; padding:18px; z-index:1200;">
+  <div style="width:min(980px, 100%); background:rgba(255,255,255,0.98); border:1px solid rgba(82, 92, 74, 0.18); border-radius:18px; padding:16px 16px; box-shadow:0 24px 60px rgba(0,0,0,0.22);">
+    <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div style="font-weight:900; font-size:1.15rem;">Match review</div>
+      <button id="closeReviewBtn">Close</button>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start;">
+      <div style="flex: 0 0 auto;">
+        <div class="board" id="reviewBoard" style="margin-top:0;"></div>
+        <div style="display:flex; gap:10px; justify-content:center; align-items:center; margin-top:12px;">
+          <button id="reviewPrevBtn">Prev</button>
+          <input id="reviewSlider" type="range" min="0" max="0" value="0" style="width: 360px;">
+          <button id="reviewNextBtn">Next</button>
+        </div>
+        <div id="reviewMeta" style="margin-top:10px; text-align:center; font-weight:700; color:#4e644a;"></div>
+      </div>
+      <div style="flex: 1 1 320px; min-width: 300px;">
+        <div class="label" style="margin-bottom:8px;">Moves</div>
+        <div id="reviewMoves" style="max-height: 520px; overflow:auto; border:1px solid rgba(82, 92, 74, 0.15); border-radius: 14px; background: rgba(39,45,33,0.04); padding: 10px 10px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="game-area">
   <div class="capture-column">
     <div class="capture-title">White captured</div>
@@ -205,6 +374,14 @@ h1 {
   <div class="capture-column">
     <div class="capture-title">Black captured</div>
     <div id="blackCaptured" class="capture-pieces"></div>
+  </div>
+</div>
+
+<div class="below-board-panel" id="belowBoardActions">
+  <div class="control-group" id="gameActions">
+    <div class="label">Game</div>
+    <button id="offerDrawBtn" disabled>Offer draw</button>
+    <button id="resignBtn" disabled>Resign</button>
   </div>
 </div>
 <div id="logs"></div>
@@ -219,6 +396,39 @@ const statusEl = document.getElementById("status");
 const logsEl = document.getElementById("logs");
 const whiteCapturedEl = document.getElementById("whiteCaptured");
 const blackCapturedEl = document.getElementById("blackCaptured");
+const modeSelectEl = document.getElementById("modeSelect");
+const queueBtnEl = document.getElementById("queueBtn");
+const cancelQueueBtnEl = document.getElementById("cancelQueueBtn");
+const lobbyControlsEl = document.getElementById("lobbyControls");
+const powerPanelEl = document.getElementById("powerPanel");
+const powerFreezeBtnEl = document.getElementById("powerFreezeBtn");
+const powerTeleportBtnEl = document.getElementById("powerTeleportBtn");
+const powerSwapBtnEl = document.getElementById("powerSwapBtn");
+const powerCancelBtnEl = document.getElementById("powerCancelBtn");
+const swapsLeftPillEl = document.getElementById("swapsLeftPill");
+const offerDrawBtnEl = document.getElementById("offerDrawBtn");
+const resignBtnEl = document.getElementById("resignBtn");
+const belowBoardActionsEl = document.getElementById("belowBoardActions");
+const modalOverlayEl = document.getElementById("modalOverlay");
+const modalTitleEl = document.getElementById("modalTitle");
+const modalMessageEl = document.getElementById("modalMessage");
+const modalPrimaryBtnEl = document.getElementById("modalPrimaryBtn");
+const modalSecondaryBtnEl = document.getElementById("modalSecondaryBtn");
+const endOverlayEl = document.getElementById("endOverlay");
+const endTitleEl = document.getElementById("endTitle");
+const endMessageEl = document.getElementById("endMessage");
+const endModeSelectEl = document.getElementById("endModeSelect");
+const endLobbyBtnEl = document.getElementById("endLobbyBtn");
+const endRequeueBtnEl = document.getElementById("endRequeueBtn");
+const reviewMatchBtnEl = document.getElementById("reviewMatchBtn");
+const reviewOverlayEl = document.getElementById("reviewOverlay");
+const closeReviewBtnEl = document.getElementById("closeReviewBtn");
+const reviewBoardEl = document.getElementById("reviewBoard");
+const reviewPrevBtnEl = document.getElementById("reviewPrevBtn");
+const reviewNextBtnEl = document.getElementById("reviewNextBtn");
+const reviewSliderEl = document.getElementById("reviewSlider");
+const reviewMovesEl = document.getElementById("reviewMoves");
+const reviewMetaEl = document.getElementById("reviewMeta");
 
 let board = null;
 let room = null;
@@ -230,6 +440,13 @@ let draggedPiece = null;
 let gameStatus = { status: "active" };
 let capturedWhite = [];
 let capturedBlack = [];
+let mode = null;
+let isQueued = false;
+let pendingPower = null; // "freeze" | "teleport" | "swap"
+let modalOnPrimary = null;
+let modalOnSecondary = null;
+let matchHistory = { boards: [], moves: [] };
+let reviewIndex = 0;
 
 const symbols = {
  r:"♜", n:"♞", b:"♝", q:"♛", k:"♚", p:"♟",
@@ -366,16 +583,53 @@ function getValidMoves(r, c) {
 // =========================
 // SOCKET EVENTS
 // =========================
-socket.on("waiting", () => {
-  statusEl.textContent = "⏳ Waiting for opponent...";
-  log("Waiting for opponent to connect", "info");
+socket.on("queued", (d) => {
+  isQueued = true;
+  mode = d.mode;
+  modeSelectEl.disabled = true;
+  queueBtnEl.disabled = true;
+  cancelQueueBtnEl.disabled = false;
+  lobbyControlsEl.style.display = "flex";
+  statusEl.textContent = `⏳ Queued for ${modeLabel(mode)}... (position ${d.position})`;
+  log(`Queued for mode: ${mode} (position ${d.position})`, "info");
+});
+
+socket.on("queueCancelled", () => {
+  isQueued = false;
+  modeSelectEl.disabled = false;
+  queueBtnEl.disabled = false;
+  cancelQueueBtnEl.disabled = true;
+  lobbyControlsEl.style.display = "flex";
+  statusEl.textContent = "Pick a mode and press Queue.";
+  log("Queue cancelled.", "info");
+});
+
+socket.on("queueRejected", (d) => {
+  log(`Queue rejected: ${d.reason}`, "error");
+  isQueued = false;
+  modeSelectEl.disabled = false;
+  queueBtnEl.disabled = false;
+  cancelQueueBtnEl.disabled = true;
+  lobbyControlsEl.style.display = "flex";
 });
 
 socket.on("start", (d) => {
   myColor = d.color;
   room = d.room;
-  statusEl.textContent = `You are playing as ${myColor.toUpperCase()}`;
-  log(`Game started! You are ${myColor}. Room: ${room}`, "success");
+  mode = d.mode || mode;
+  isQueued = false;
+  modeSelectEl.disabled = true;
+  queueBtnEl.disabled = true;
+  cancelQueueBtnEl.disabled = true;
+  lobbyControlsEl.style.display = "none";
+  endOverlayEl.style.display = "none";
+  reviewOverlayEl.style.display = "none";
+  belowBoardActionsEl.style.display = "flex";
+  reviewBoardEl.innerHTML = "";
+  statusEl.textContent = `You are playing as ${myColor.toUpperCase()} (${modeLabel(mode)})`;
+  log(`Game started! You are ${myColor}. Mode: ${mode}. Room: ${room}`, "success");
+  updatePowerPanel();
+  updateGameActions();
 });
 
 socket.on("update", (d) => {
@@ -384,6 +638,14 @@ socket.on("update", (d) => {
   gameStatus = d.gameStatus || { status: "active" };
   capturedWhite = d.capturedWhite || [];
   capturedBlack = d.capturedBlack || [];
+  mode = d.mode || mode;
+  if (d.history && Array.isArray(d.history.boards) && Array.isArray(d.history.moves)) {
+    matchHistory = d.history;
+  }
+  if (mode === "powered-king" && d.poweredKing && myColor) {
+    const swapsLeft = d.poweredKing?.swapsLeft?.[myColor] ?? 0;
+    swapsLeftPillEl.textContent = `Swaps left: ${swapsLeft}`;
+  }
   
   let statusText = `It's ${turn.toUpperCase()}'s turn`;
   if (gameStatus.status === "check") {
@@ -392,6 +654,10 @@ socket.on("update", (d) => {
     statusText = `CHECKMATE! ${gameStatus.winner.toUpperCase()} WINS! 👑`;
   } else if (gameStatus.status === "stalemate") {
     statusText = "STALEMATE! It's a draw. 🤝";
+  } else if (gameStatus.status === "resigned") {
+    statusText = `RESIGNATION — ${String(gameStatus.winner || "").toUpperCase()} WINS`;
+  } else if (gameStatus.status === "draw") {
+    statusText = "DRAW — game ended in a draw";
   }
   
   if (turn === myColor && gameStatus.status === "active") {
@@ -399,8 +665,33 @@ socket.on("update", (d) => {
   } else if (turn === myColor && gameStatus.status === "check") {
     statusText += " (YOUR TURN - YOU'RE IN CHECK!)";
   }
+
+  if (mode) statusText += ` — ${modeLabel(mode)}`;
+  if (pendingPower && turn === myColor && gameStatus.status === "active") {
+    statusText += ` — Power: ${pendingPower.toUpperCase()} (click a target square)`;
+  }
   
   statusEl.textContent = statusText;
+  updatePowerPanel();
+  updateGameActions();
+
+  const inGame = Boolean(room && myColor);
+  lobbyControlsEl.style.display = inGame ? "none" : "flex";
+
+  if (inGame && isGameOverStatus(gameStatus.status)) {
+    // End-of-match window
+    endModeSelectEl.value = modeSelectEl.value || "regular";
+    endTitleEl.textContent = "Match ended";
+    endMessageEl.textContent = statusText;
+    endOverlayEl.style.display = "flex";
+    belowBoardActionsEl.style.display = "none";
+  }
+  if (inGame && !isGameOverStatus(gameStatus.status)) {
+    belowBoardActionsEl.style.display = "flex";
+    endOverlayEl.style.display = "none";
+    reviewOverlayEl.style.display = "none";
+  }
+
   render();
   renderCaptured();
 });
@@ -414,6 +705,55 @@ socket.on("moveRejected", (d) => {
   selected = null;
   validMoves = [];
   render();
+});
+
+socket.on("powerConfirmed", (d) => {
+  log(`✨ Power confirmed: ${String(d.type).toUpperCase()} at [${d.target}]`, "success");
+});
+
+socket.on("powerRejected", (d) => {
+  log(`❌ Power rejected: ${d.reason}`, "error");
+});
+
+socket.on("drawOfferSent", () => {
+  log("🤝 Draw offer sent. Waiting for opponent...", "info");
+});
+
+socket.on("drawOffered", (d) => {
+  showModal({
+    title: "Draw offer",
+    message: `${String(d.from || "Opponent").toUpperCase()} offered a draw. Accept?`,
+    primaryText: "Accept",
+    secondaryText: "Reject",
+    onPrimary: () => socket.emit("respondDraw", { room, accept: true }),
+    onSecondary: () => socket.emit("respondDraw", { room, accept: false })
+  });
+});
+
+socket.on("drawAccepted", () => {
+  hideModal();
+  log("🤝 Draw accepted. Game ended in a draw.", "success");
+});
+
+socket.on("drawRejected", () => {
+  hideModal();
+  log("Draw rejected. Play continues.", "info");
+});
+
+socket.on("drawOfferRejected", (d) => {
+  log(`❌ Draw offer rejected: ${d.reason}`, "error");
+});
+
+socket.on("drawResponseRejected", (d) => {
+  log(`❌ Draw response rejected: ${d.reason}`, "error");
+});
+
+socket.on("resignConfirmed", () => {
+  log("You resigned.", "info");
+});
+
+socket.on("resignRejected", (d) => {
+  log(`❌ Resign rejected: ${d.reason}`, "error");
 });
 
 socket.on("connect_error", (error) => {
@@ -437,13 +777,23 @@ function sendMove(fr, fc, tr, tc) {
   });
 }
 
+function sendPower(type, tr, tc) {
+  if (!room) return;
+  log(`📤 Sending power: ${type.toUpperCase()} → [${tr},${tc}]`, "info");
+  socket.emit("kingPower", {
+    room,
+    type,
+    target: [tr, tc]
+  });
+}
+
 // =========================
 // RENDER
 // =========================
-function render() {
-  if (!board) return;
+function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
+  if (!boardToRender) return;
 
-  boardEl.innerHTML = "";
+  targetEl.innerHTML = "";
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -451,33 +801,42 @@ function render() {
       const sq = document.createElement("div");
       sq.className = "square " + ((r + c) % 2 ? "black" : "white");
 
-      const piece = board[r][c];
+      const piece = boardToRender[r][c];
       if (piece) {
         const pieceEl = document.createElement("span");
-        pieceEl.className = `piece ${isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
+        const isKing = getPieceType(piece) === "k";
+        const kingClass = (mode === "powered-king" && isKing) ? " piece-king" : "";
+        pieceEl.className = `piece ${isWhitePiece(piece) ? "piece-white" : "piece-black"}${kingClass}`;
         pieceEl.textContent = symbols[piece] || "";
         sq.appendChild(pieceEl);
       }
 
-      // Highlight selected square
-      if (selected && selected[0] === r && selected[1] === c) {
-        sq.classList.add("selected");
-      }
+      if (interactive) {
+        // Highlight selected square
+        if (selected && selected[0] === r && selected[1] === c) {
+          sq.classList.add("selected");
+        }
 
-      // Highlight valid moves
-      if (validMoves.some(([vr, vc]) => vr === r && vc === c)) {
-        sq.classList.add("valid-move");
+        // Highlight valid moves
+        if (validMoves.some(([vr, vc]) => vr === r && vc === c)) {
+          sq.classList.add("valid-move");
+        }
       }
 
       // Drag start
-      sq.draggable = true;
-      sq.addEventListener("dragstart", (e) => {
-        if (gameStatus.status === "checkmate" || gameStatus.status === "stalemate") {
+      sq.draggable = interactive;
+      if (interactive) sq.addEventListener("dragstart", (e) => {
+        if (gameStatus.status === "checkmate" || gameStatus.status === "stalemate" || gameStatus.status === "draw" || gameStatus.status === "resigned") {
           e.preventDefault();
           return;
         }
 
         if (turn !== myColor) {
+          e.preventDefault();
+          return;
+        }
+
+        if (pendingPower) {
           e.preventDefault();
           return;
         }
@@ -499,19 +858,19 @@ function render() {
         e.dataTransfer.effectAllowed = "move";
       });
 
-      sq.addEventListener("dragend", (e) => {
+      if (interactive) sq.addEventListener("dragend", (e) => {
         draggedPiece = null;
         sq.classList.remove("dragging");
       });
 
       // Drag over
-      sq.addEventListener("dragover", (e) => {
+      if (interactive) sq.addEventListener("dragover", (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
       });
 
       // Drop
-      sq.addEventListener("drop", (e) => {
+      if (interactive) sq.addEventListener("drop", (e) => {
         e.preventDefault();
         
         if (!draggedPiece) return;
@@ -529,14 +888,24 @@ function render() {
       });
 
       // Click for move confirmation
-      sq.addEventListener("click", () => {
-        if (gameStatus.status === "checkmate" || gameStatus.status === "stalemate") {
+      if (interactive) sq.addEventListener("click", () => {
+        if (gameStatus.status === "checkmate" || gameStatus.status === "stalemate" || gameStatus.status === "draw" || gameStatus.status === "resigned") {
           log("Game is over!", "error");
           return;
         }
 
         if (turn !== myColor) {
           log("Not your turn!", "error");
+          return;
+        }
+
+        if (pendingPower) {
+          const powerType = pendingPower;
+          pendingPower = null;
+          selected = null;
+          validMoves = [];
+          sendPower(powerType, r, c);
+          render();
           return;
         }
 
@@ -578,9 +947,14 @@ function render() {
         render();
       });
 
-      boardEl.appendChild(sq);
+      targetEl.appendChild(sq);
     }
   }
+}
+
+function render() {
+  if (!board) return;
+  renderBoard(boardEl, board, { interactive: true });
 }
 
 function renderCaptured() {
@@ -603,6 +977,241 @@ function renderCaptured() {
     blackCapturedEl.appendChild(token);
   });
 }
+
+function modeLabel(m) {
+  if (m === "regular") return "Regular Chess";
+  if (m === "powered-king") return "Powered King Chess";
+  if (m === "fog-of-war") return "Fog of War Chess";
+  return m || "Unknown";
+}
+
+function updatePowerPanel() {
+  const shouldShow = mode === "powered-king" && myColor;
+  powerPanelEl.classList.toggle("active", shouldShow);
+  if (!shouldShow) pendingPower = null;
+
+  const myTurn = turn === myColor && gameStatus.status === "active";
+  const disabled = !myTurn;
+  powerFreezeBtnEl.disabled = disabled;
+  powerTeleportBtnEl.disabled = disabled;
+  powerSwapBtnEl.disabled = disabled;
+  powerCancelBtnEl.disabled = !pendingPower;
+}
+
+function updateGameActions() {
+  const inGame = Boolean(room && myColor);
+  const gameActive = gameStatus.status === "active" || gameStatus.status === "check";
+  const enabled = inGame && gameActive;
+  offerDrawBtnEl.disabled = !enabled;
+  resignBtnEl.disabled = !enabled;
+}
+
+function isGameOverStatus(status) {
+  return status === "checkmate" || status === "stalemate" || status === "draw" || status === "resigned";
+}
+
+function moveLabel(m, idx) {
+  if (!m) return `${idx + 1}. (unknown)`;
+  if (m.kind === "power") {
+    return `${idx + 1}. ${String(m.by || "").toUpperCase()} POWER: ${String(m.power || "").toUpperCase()} → [${(m.target || []).join(",")}]`;
+  }
+  const cap = m.captured ? ` x${m.captured}` : "";
+  const promo = m.promotedTo ? `=${m.promotedTo}` : "";
+  return `${idx + 1}. ${String(m.by || "").toUpperCase()} ${m.piece} [${(m.from || []).join(",")}]→[${(m.to || []).join(",")}]${cap}${promo}`;
+}
+
+function openReview() {
+  const boards = matchHistory?.boards || [];
+  const moves = matchHistory?.moves || [];
+  if (!Array.isArray(boards) || boards.length === 0) {
+    log("No match history available to review.", "error");
+    return;
+  }
+
+  reviewIndex = Math.min(reviewIndex, boards.length - 1);
+  reviewSliderEl.min = "0";
+  reviewSliderEl.max = String(boards.length - 1);
+  reviewSliderEl.value = String(reviewIndex);
+
+  reviewMovesEl.innerHTML = "";
+  moves.forEach((m, i) => {
+    const row = document.createElement("div");
+    row.className = "log-entry info";
+    row.style.cursor = "pointer";
+    row.textContent = moveLabel(m, i);
+    row.addEventListener("click", () => {
+      setReviewIndex(i + 1);
+    });
+    reviewMovesEl.appendChild(row);
+  });
+
+  reviewOverlayEl.style.display = "flex";
+  endOverlayEl.style.display = "none";
+  setReviewIndex(boards.length - 1);
+}
+
+function closeReview() {
+  reviewOverlayEl.style.display = "none";
+  if (room && myColor && isGameOverStatus(gameStatus.status)) {
+    endOverlayEl.style.display = "flex";
+  }
+}
+
+function setReviewIndex(i) {
+  const boards = matchHistory?.boards || [];
+  if (!boards.length) return;
+  reviewIndex = Math.max(0, Math.min(i, boards.length - 1));
+  reviewSliderEl.value = String(reviewIndex);
+  renderBoard(reviewBoardEl, boards[reviewIndex], { interactive: false });
+
+  const ply = reviewIndex;
+  const total = boards.length - 1;
+  const lastMove = matchHistory?.moves?.[Math.max(0, ply - 1)];
+  reviewMetaEl.textContent = ply === 0 ? `Start position (0/${total})` : `${moveLabel(lastMove, ply - 1)} (${ply}/${total})`;
+}
+
+function resetToLobbyUi({ clearBoard = false } = {}) {
+  pendingPower = null;
+  selected = null;
+  validMoves = [];
+  draggedPiece = null;
+  hideModal();
+  endOverlayEl.style.display = "none";
+  reviewOverlayEl.style.display = "none";
+
+  room = null;
+  myColor = null;
+  turn = "white";
+  gameStatus = { status: "active" };
+  capturedWhite = [];
+  capturedBlack = [];
+  if (clearBoard) board = null;
+
+  isQueued = false;
+  modeSelectEl.disabled = false;
+  queueBtnEl.disabled = false;
+  cancelQueueBtnEl.disabled = true;
+  lobbyControlsEl.style.display = "flex";
+  belowBoardActionsEl.style.display = "none";
+  updatePowerPanel();
+  updateGameActions();
+  statusEl.textContent = "Pick a mode and press Queue.";
+  render();
+  renderCaptured();
+}
+
+function showModal({ title, message, primaryText = "OK", secondaryText = "Cancel", onPrimary, onSecondary }) {
+  modalTitleEl.textContent = title;
+  modalMessageEl.textContent = message;
+  modalPrimaryBtnEl.textContent = primaryText;
+  modalSecondaryBtnEl.textContent = secondaryText;
+  modalOnPrimary = onPrimary || null;
+  modalOnSecondary = onSecondary || null;
+  modalOverlayEl.style.display = "flex";
+}
+
+function hideModal() {
+  modalOverlayEl.style.display = "none";
+  modalOnPrimary = null;
+  modalOnSecondary = null;
+}
+
+modalPrimaryBtnEl.addEventListener("click", () => {
+  const fn = modalOnPrimary;
+  hideModal();
+  if (typeof fn === "function") fn();
+});
+
+modalSecondaryBtnEl.addEventListener("click", () => {
+  const fn = modalOnSecondary;
+  hideModal();
+  if (typeof fn === "function") fn();
+});
+
+offerDrawBtnEl.addEventListener("click", () => {
+  if (!room) return;
+  socket.emit("offerDraw", { room });
+});
+
+resignBtnEl.addEventListener("click", () => {
+  if (!room) return;
+  showModal({
+    title: "Resign?",
+    message: "Are you sure you want to resign? This will immediately end the game.",
+    primaryText: "Resign",
+    secondaryText: "Cancel",
+    onPrimary: () => socket.emit("resign", { room }),
+    onSecondary: () => {}
+  });
+});
+
+endRequeueBtnEl.addEventListener("click", () => {
+  const selectedMode = endModeSelectEl.value;
+  modeSelectEl.value = selectedMode;
+  resetToLobbyUi({ clearBoard: false });
+  socket.emit("queue", { mode: selectedMode });
+});
+
+endLobbyBtnEl.addEventListener("click", () => {
+  modeSelectEl.value = endModeSelectEl.value;
+  resetToLobbyUi({ clearBoard: false });
+  log("Returned to lobby.", "info");
+});
+
+reviewMatchBtnEl.addEventListener("click", () => {
+  openReview();
+});
+
+closeReviewBtnEl.addEventListener("click", () => {
+  closeReview();
+});
+
+reviewPrevBtnEl.addEventListener("click", () => {
+  setReviewIndex(reviewIndex - 1);
+});
+
+reviewNextBtnEl.addEventListener("click", () => {
+  setReviewIndex(reviewIndex + 1);
+});
+
+reviewSliderEl.addEventListener("input", () => {
+  setReviewIndex(Number(reviewSliderEl.value));
+});
+
+queueBtnEl.addEventListener("click", () => {
+  const selectedMode = modeSelectEl.value;
+  socket.emit("queue", { mode: selectedMode });
+});
+
+cancelQueueBtnEl.addEventListener("click", () => {
+  socket.emit("cancelQueue");
+});
+
+powerFreezeBtnEl.addEventListener("click", () => {
+  pendingPower = "freeze";
+  log("Freeze selected. Click an enemy piece to freeze it for 1 turn.", "info");
+  render();
+});
+
+powerTeleportBtnEl.addEventListener("click", () => {
+  pendingPower = "teleport";
+  log("Teleport selected. Click an empty square that is not protected by the enemy.", "info");
+  render();
+});
+
+powerSwapBtnEl.addEventListener("click", () => {
+  pendingPower = "swap";
+  log("Swap selected. Click a friendly (non-king) piece to swap with your king.", "info");
+  render();
+});
+
+powerCancelBtnEl.addEventListener("click", () => {
+  pendingPower = null;
+  log("Power cancelled.", "info");
+  render();
+});
+
+statusEl.textContent = "Pick a mode and press Queue.";
 </script>
 
 </body>
