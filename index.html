@@ -405,6 +405,12 @@ try {
     const parsed = JSON.parse(saved);
     if (parsed?.room && parsed?.token) {
       socket.emit("reconnect", { room: parsed.room, token: parsed.token });
+
+      // Reset transient UI immediately to avoid sending/playing with stale state.
+      moveInFlight = false;
+      pendingPower = null;
+      selected = null;
+      validMoves = [];
     }
   }
 } catch (e) {
@@ -414,6 +420,7 @@ try {
 // Track last known server turn to prevent client from sending moves multiple times
 // during the reconnect handshake.
 let lastServerTurn = null;
+
 
 
 
