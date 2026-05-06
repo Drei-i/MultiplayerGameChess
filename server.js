@@ -704,13 +704,12 @@ io.on("connection", (socket) => {
     game.players[playerColor].socketId = socket.id;
 
     socket.join(room);
-
     // Re-send start + current game snapshot.
     socket.emit("start", { color: playerColor, room, mode: game.mode, token });
-    emitGameUpdate(room);
 
-    // Make sure transient state is correct for the reconnecting client.
-    game.lastActivity = Date.now();
+    // Reset transient client/UI state by pushing the authoritative server state.
+    // IMPORTANT: do NOT change game.turn here; refresh must not affect whose turn it is.
+    emitGameUpdate(room);
   });
 
 
