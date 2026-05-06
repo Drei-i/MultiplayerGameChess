@@ -983,8 +983,8 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
 
 function render() {
   if (!board) {
-    // Lobby/open window: show a preview board immediately.
-    // This matches START_BOARD() layout from the server.
+    // Lobby/open window: render preview board immediately.
+    // IMPORTANT: keep `board` as an 8x8 array so the grid always renders correctly.
     board = [
       ["r","n","b","q","k","b","n","r"],
       ["p","p","p","p","p","p","p","p"],
@@ -998,11 +998,19 @@ function render() {
     turn = "white";
     selected = null;
     validMoves = [];
-    // board is now preview; keep controls hidden until match start
-    return renderBoard(boardEl, board, { interactive: false });
+
+    boardEl.style.display = "grid";
+    boardEl.style.gridTemplateColumns = "repeat(8, 72px)";
+
+    renderBoard(boardEl, board, { interactive: false });
+    return;
   }
+
+  boardEl.style.display = "grid";
+  boardEl.style.gridTemplateColumns = "repeat(8, 72px)";
   renderBoard(boardEl, board, { interactive: true });
 }
+
 
 function renderCaptured() {
   if (!whiteCapturedEl || !blackCapturedEl) return;
