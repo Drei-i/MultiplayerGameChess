@@ -571,15 +571,10 @@ const handleMove = (socket, data) => {
   // Handle pawn promotion
   if (pieceType === "p") {
     if ((isWhite && tr === 0) || (!isWhite && tr === 7)) {
-      const promo = String(data.promotion || "").toUpperCase().trim();
-      const allowed = new Set(["Q", "R", "B", "N"]);
-      const chosen = allowed.has(promo) ? promo : "Q";
-
-      game.board[tr][tc] = isWhite ? chosen : chosen.toLowerCase();
+      game.board[tr][tc] = isWhite ? "Q" : "q";
       promoted = true;
-      console.log(`♛ PAWN PROMOTED to ${chosen} at [${tr},${tc}]`);
+      console.log(`♛ PAWN PROMOTED to queen at [${tr},${tc}]`);
     }
-
     if (Math.abs(tr - sr) === 2) {
       const dir = isWhite ? -1 : 1;
       game.enPassantTarget = [sr + dir, sc];
@@ -589,7 +584,6 @@ const handleMove = (socket, data) => {
   } else {
     game.enPassantTarget = null;
   }
-
 
   // Update castling rights
   if (pieceType === "k") {
@@ -625,8 +619,7 @@ const handleMove = (socket, data) => {
       from: [sr, sc],
       to: [tr, tc],
       captured: capturedPiece || null,
-      promotedTo: promoted ? (isWhite ? String(data.promotion || "Q").toUpperCase().trim().replace(/[^QRBN]/g, "") || "Q" : String(data.promotion || "q").toUpperCase().trim().replace(/[^QRBN]/g, "Q") && String(data.promotion || "Q").toUpperCase().trim().replace(/[^QRBN]/g, "Q").toLowerCase()) : null,
-
+      promotedTo: promoted ? (isWhite ? "Q" : "q") : null,
       at: Date.now()
     });
     game.history.boards.push(deepCloneBoard(game.board));

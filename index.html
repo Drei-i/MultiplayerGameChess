@@ -788,27 +788,17 @@ function canSendActions() {
   return Boolean(room && myColor);
 }
 
-let pendingPromotion = null; // { from:[r,c], to:[r,c], pieceColor:'white'|'black' }
-
-function isPromotionMove(fromR, toR, pieceChar) {
-  const type = getPieceType(pieceChar);
-  if (type !== "p") return false;
-  const isWhite = isWhitePiece(pieceChar);
-  return (isWhite && toR === 0) || (!isWhite && toR === 7);
-}
-
-function sendMove(fr, fc, tr, tc, promotion = null) {
+function sendMove(fr, fc, tr, tc) {
   if (!canSendActions()) return;
   if (moveInFlight) return;
 
   moveInFlight = true;
-  log(`📤 Sending move: [${fr},${fc}] → [${tr},${tc}]${promotion ? ` (promo ${promotion})` : ""}`, "info");
+  log(`📤 Sending move: [${fr},${fc}] → [${tr},${tc}]`, "info");
 
   socket.emit("move", {
     room,
     from: [fr, fc],
-    to: [tr, tc],
-    promotion
+    to: [tr, tc]
   });
 }
 
