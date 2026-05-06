@@ -624,7 +624,11 @@ socket.on("start", (d) => {
   lobbyControlsEl.style.display = "none";
   endOverlayEl.style.display = "none";
   reviewOverlayEl.style.display = "none";
+
+  // Game UI (show captured + game actions only after match start)
+  document.querySelector('.game-area').style.display = 'flex';
   belowBoardActionsEl.style.display = "flex";
+
   reviewBoardEl.innerHTML = "";
   statusEl.textContent = `You are playing as ${myColor.toUpperCase()} (${modeLabel(mode)})`;
   log(`Game started! You are ${myColor}. Mode: ${mode}. Room: ${room}`, "success");
@@ -960,8 +964,22 @@ function render() {
 function renderCaptured() {
   if (!whiteCapturedEl || !blackCapturedEl) return;
 
+  // Per UI request: during queue/lobby, hide captured panels (board only).
+  const inGame = Boolean(room && myColor);
+  const gameArea = document.querySelector('.game-area');
+  if (gameArea) gameArea.style.display = 'flex';
+
+  // Hide the captured columns when not in a match.
+  const captureColumns = document.querySelectorAll('.capture-column');
+  captureColumns.forEach((el, idx) => {
+    // idx 0 = white captured, idx 1 = black captured
+    el.style.display = inGame ? 'flex' : 'none';
+  });
+
   whiteCapturedEl.innerHTML = "";
   blackCapturedEl.innerHTML = "";
+
+  if (!inGame) return;
 
   capturedWhite.forEach(piece => {
     const token = document.createElement("div");
@@ -1004,6 +1022,9 @@ function updateGameActions() {
   const enabled = inGame && gameActive;
   offerDrawBtnEl.disabled = !enabled;
   resignBtnEl.disabled = !enabled;
+
+  // Per UI request: hide draw/resign actions until match is started
+  belowBoardActionsEl.style.display = inGame ? "flex" : "none";
 }
 
 function isGameOverStatus(status) {
@@ -1092,7 +1113,10 @@ function resetToLobbyUi({ clearBoard = false } = {}) {
   queueBtnEl.disabled = false;
   cancelQueueBtnEl.disabled = true;
   lobbyControlsEl.style.display = "flex";
+
+  // Board stays visible; only hide capture columns + draw/resign buttons.
   belowBoardActionsEl.style.display = "none";
+
   updatePowerPanel();
   updateGameActions();
   statusEl.textContent = "Pick a mode and press Queue.";
