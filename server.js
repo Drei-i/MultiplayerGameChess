@@ -118,14 +118,13 @@ const emitGameUpdate = (room) => {
 
   if (game.mode === GAME_MODES.FOG_OF_WAR) {
     for (const color of ["white", "black"]) {
-      const socketId = game.players[color]?.socketId;
+      const socketId = game.players[color];
       if (!socketId) continue;
       const fogBoard = buildFogBoardForColor(game.board, color);
       io.to(socketId).emit("update", { ...basePayload, board: fogBoard });
     }
     return;
   }
-
 
   io.to(room).emit("update", basePayload);
 
@@ -427,27 +426,6 @@ const hasLegalMoves = (board, isWhite, game = {}) => {
 const getGameStatus = (board, turn, game = {}) => {
   const isWhiteTurn = turn === "white";
   
-  if (game.halfMoveClock >= 100) {
-    console.log(`🤝 DRAW! Fifty-move rule.`);
-    return { status: "draw", reason: "fifty-move rule" };
-  }
-
-  const pieces = [];
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      if (board[r][c]) pieces.push(board[r][c].toLowerCase());
-    }
-  }
-  
-  const pCount = pieces.length;
-  if (pCount === 2) {
-    return { status: "draw", reason: "insufficient material" };
-  } else if (pCount === 3) {
-    if (pieces.includes("n") || pieces.includes("b")) {
-      return { status: "draw", reason: "insufficient material" };
-    }
-  }
-
   const inCheck = isInCheck(board, isWhiteTurn);
   const hasMovesAvailable = hasLegalMoves(board, isWhiteTurn, game);
   
@@ -558,14 +536,6 @@ const handleMove = (socket, data) => {
   const pieceType = getPieceType(piece);
   let capturedPiece = game.board[tr][tc];
   let promoted = false;
-  let promotedTo = null;
-
-  game.lastActivity = Date.now();
-  if (pieceType === "p" || capturedPiece) {
-    game.halfMoveClock = 0;
-  } else {
-    game.halfMoveClock++;
-  }
 
   // Special en passant capture
   if (pieceType === "p" && game.enPassantTarget && tr === game.enPassantTarget[0] && tc === game.enPassantTarget[1] && sc !== tc) {
@@ -607,7 +577,6 @@ const handleMove = (socket, data) => {
 
       game.board[tr][tc] = isWhite ? chosen : chosen.toLowerCase();
       promoted = true;
-      promotedTo = isWhite ? chosen : chosen.toLowerCase();
       console.log(`♛ PAWN PROMOTED to ${chosen} at [${tr},${tc}]`);
     }
 
@@ -656,22 +625,16 @@ const handleMove = (socket, data) => {
       from: [sr, sc],
       to: [tr, tc],
       captured: capturedPiece || null,
-      promotedTo: promotedTo,
+      promotedTo: promoted ? (isWhite ? String(data.promotion || "Q").toUpperCase().trim().replace(/[^QRBN]/g, "") || "Q" : String(data.promotion || "q").toUpperCase().trim().replace(/[^QRBN]/g, "Q") && String(data.promotion || "Q").toUpperCase().trim().replace(/[^QRBN]/g, "Q").toLowerCase()) : null,
+
       at: Date.now()
     });
     game.history.boards.push(deepCloneBoard(game.board));
 
-    if (game.history.moves.length > MAX_HISTORY) {
-      game.history.moves.shift();
-      game.history.boards.shift();
-    }
+    if (game.history.moves.length > MAX_HISTORY) game.history.moves.shift();
+    if (game.history.boards.length > MAX_HISTORY) game.history.boards.shift();
   }
 
-  const stateKey = JSON.stringify({b: game.board, t: game.turn, c: game.castling, e: game.enPassantTarget});
-  game.positionCounts[stateKey] = (game.positionCounts[stateKey] || 0) + 1;
-  if (game.positionCounts[stateKey] >= 3) {
-    game.manualStatus = { status: "draw", reason: "threefold repetition" };
-  }
 
   console.log(`✅ MOVE accepted: ${piece} from [${sr},${sc}] to [${tr},${tc}]${capturedPiece ? ` (captured ${capturedPiece})` : ""}${promoted ? " [PROMOTED]" : ""}`);
   
@@ -688,31 +651,6 @@ io.on("connection", (socket) => {
 
   // Register move handler for this socket
   socket.on("move", (data) => handleMove(socket, data));
-
-  // Allow client refresh to reconnect to the existing match using a token.
-  socket.on("reconnect", (data = {}) => {
-    const { room, token } = data;
-    const game = rooms[room];
-    if (!game || !token) return;
-
-    const isWhiteToken = game.players.white?.reconnectToken === token;
-    const isBlackToken = game.players.black?.reconnectToken === token;
-    const playerColor = isWhiteToken ? "white" : isBlackToken ? "black" : null;
-    if (!playerColor) return;
-
-    // Rebind this socket to the player color.
-    game.players[playerColor].socketId = socket.id;
-
-    socket.join(room);
-    // Re-send start + current game snapshot.
-    socket.emit("start", { color: playerColor, room, mode: game.mode, token });
-
-    // Reset transient client/UI state by pushing the authoritative server state.
-    // IMPORTANT: do NOT change game.turn here; refresh must not affect whose turn it is.
-    emitGameUpdate(room);
-  });
-
-
 
   socket.on("queue", (data = {}) => {
     const mode = normalizeMode(data.mode);
@@ -750,16 +688,13 @@ io.on("connection", (socket) => {
 
       const room = "room-" + Date.now();
 
-      const tokenA = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      const tokenB = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-
       const game = {
         mode,
         board: START_BOARD(),
         turn: "white",
         players: {
-          white: { socketId: whiteEntry.socketId, reconnectToken: tokenA },
-          black: { socketId: blackEntry.socketId, reconnectToken: tokenB }
+          white: { socketId: whiteEntry.socketId, reconnectToken: null },
+          black: { socketId: blackEntry.socketId, reconnectToken: null }
         },
 
         history: {
@@ -770,9 +705,6 @@ io.on("connection", (socket) => {
         drawOfferFrom: null,
         capturedWhite: [],
         capturedBlack: [],
-        halfMoveClock: 0,
-        positionCounts: {},
-        lastActivity: Date.now(),
         castling: {
           white: { kingside: true, queenside: true },
           black: { kingside: true, queenside: true }
@@ -789,8 +721,8 @@ io.on("connection", (socket) => {
       p1.join(room);
       p2.join(room);
 
-      io.to(whiteEntry.socketId).emit("start", { color: "white", room, mode, token: tokenA });
-      io.to(blackEntry.socketId).emit("start", { color: "black", room, mode, token: tokenB });
+      io.to(whiteEntry.socketId).emit("start", { color: "white", room, mode });
+      io.to(blackEntry.socketId).emit("start", { color: "black", room, mode });
 
       emitGameUpdate(room);
     }
@@ -809,10 +741,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white?.socketId === socket.id ? "white" :
-      game.players.black?.socketId === socket.id ? "black" : null;
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("resignRejected", { reason: "You are not part of this game" });
@@ -839,10 +770,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white?.socketId === socket.id ? "white" :
-      game.players.black?.socketId === socket.id ? "black" : null;
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("drawOfferRejected", { reason: "You are not part of this game" });
@@ -877,10 +807,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white?.socketId === socket.id ? "white" :
-      game.players.black?.socketId === socket.id ? "black" : null;
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("drawResponseRejected", { reason: "You are not part of this game" });
@@ -933,10 +862,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    game.lastActivity = Date.now();
     const playerColor =
-      game.players.white?.socketId === socket.id ? "white" :
-      game.players.black?.socketId === socket.id ? "black" : null;
+      game.players.white === socket.id ? "white" :
+      game.players.black === socket.id ? "black" : null;
 
     if (!playerColor) {
       socket.emit("powerRejected", { reason: "You are not part of this game" });
@@ -1051,10 +979,8 @@ io.on("connection", (socket) => {
     decrementFrozenForColor(game, playerColor);
     game.turn = game.turn === "white" ? "black" : "white";
     game.drawOfferFrom = null;
-    game.halfMoveClock++;
 
     if (game.history) {
-      const MAX_HISTORY = 200;
       game.history.moves.push({
         kind: "power",
         by: playerColor,
@@ -1063,44 +989,17 @@ io.on("connection", (socket) => {
         at: Date.now()
       });
       game.history.boards.push(deepCloneBoard(game.board));
-
-      if (game.history.moves.length > MAX_HISTORY) {
-        game.history.moves.shift();
-        game.history.boards.shift();
-      }
-    }
-
-    const stateKey = JSON.stringify({b: game.board, t: game.turn, c: game.castling, e: game.enPassantTarget});
-    game.positionCounts[stateKey] = (game.positionCounts[stateKey] || 0) + 1;
-    if (game.positionCounts[stateKey] >= 3) {
-      game.manualStatus = { status: "draw", reason: "threefold repetition" };
     }
 
     socket.emit("powerConfirmed", { type, target: [tr, tc] });
     emitGameUpdate(room);
   });
 
-  // Keep match state on refresh by allowing reconnection.
-  // We don't destroy room on disconnect; we only remove from queues.
   socket.on("disconnect", () => {
     console.log("🔴 disconnected:", socket.id);
     removeSocketFromAllQueues(socket.id);
   });
 });
-
-setInterval(() => {
-  const now = Date.now();
-  for (const room in rooms) {
-    const game = rooms[room];
-    const isOver = Boolean(game.manualStatus) || ["checkmate", "stalemate", "draw", "resigned"].includes(getGameStatus(game.board, game.turn, game).status);
-    const inactiveMs = now - (game.lastActivity || now);
-    
-    if (inactiveMs > 60 * 60 * 1000 || (isOver && inactiveMs > 5 * 60 * 1000)) {
-      console.log(`🧹 Garbage collecting room: ${room}`);
-      delete rooms[room];
-    }
-  }
-}, 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
