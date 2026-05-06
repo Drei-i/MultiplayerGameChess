@@ -411,6 +411,11 @@ try {
   // ignore
 }
 
+// Track last known server turn to prevent client from sending moves multiple times
+// during the reconnect handshake.
+let lastServerTurn = null;
+
+
 
 const boardEl = document.getElementById("board");
 const statusEl = document.getElementById("status");
@@ -667,6 +672,8 @@ socket.on("start", (d) => {
 socket.on("update", (d) => {
   board = d.board;
   turn = d.turn;
+  lastServerTurn = turn;
+
   gameStatus = d.gameStatus || { status: "active" };
   capturedWhite = d.capturedWhite || [];
   capturedBlack = d.capturedBlack || [];
