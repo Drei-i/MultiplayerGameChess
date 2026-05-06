@@ -376,6 +376,11 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
     <div id="blackCaptured" class="capture-pieces"></div>
   </div>
 </div>
+<script>
+  // Lobby/open window: keep draw/resign hidden and show an empty/preview board.
+  const belowBoardActionsElInit = document.getElementById('belowBoardActions');
+  if (belowBoardActionsElInit) belowBoardActionsElInit.style.display = 'none';
+</script>
 
 
 <div class="below-board-panel" id="belowBoardActions">
