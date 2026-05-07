@@ -1,5 +1,6 @@
 const clone = b => b.map(r => [...r]);
 
+// =========================
 // CHESS RULES
 // =========================
 const getPieceType = (piece) => {
@@ -163,8 +164,6 @@ const isMoveLegal = (board, from, to, isWhite, game = {}) => {
 // CHECK & CHECKMATE LOGIC
 // =========================
 const isSquareAttacked = (board, r, c, byWhite) => {
-  // Check if square (r,c) is attacked by pieces of color byWhite
-  
   for (let sr = 0; sr < 8; sr++) {
     for (let sc = 0; sc < 8; sc++) {
       const piece = board[sr][sc];
@@ -175,7 +174,6 @@ const isSquareAttacked = (board, r, c, byWhite) => {
       
       const type = getPieceType(piece);
       
-      // Check if this piece can attack the target square
       if (type === "p") {
         const dir = byWhite ? -1 : 1;
         if (sr + dir === r && Math.abs(sc - c) === 1) return true;
@@ -200,25 +198,21 @@ const isSquareAttacked = (board, r, c, byWhite) => {
       }
     }
   }
-  
   return false;
 };
 
 const isPathClear = (board, r1, c1, r2, c2) => {
-  // Check if path from (r1,c1) to (r2,c2) is clear (excluding source and target)
   const dr = r2 > r1 ? 1 : r2 < r1 ? -1 : 0;
   const dc = c2 > c1 ? 1 : c2 < c1 ? -1 : 0;
   
   let r = r1 + dr;
   let c = c1 + dc;
   
-  // Check all squares between source and target (not including target)
   while (r !== r2 || c !== c2) {
     if (board[r][c]) return false;
     r += dr;
     c += dc;
   }
-  
   return true;
 };
 
@@ -237,68 +231,34 @@ const isInCheck = (board, isWhite) => {
   if (!kingPos) return false;
   
   const [kr, kc] = kingPos;
-  const inCheck = isSquareAttacked(board, kr, kc, !isWhite);
-  return inCheck;
+  return isSquareAttacked(board, kr, kc, !isWhite);
 };
 
 const hasLegalMoves = (board, isWhite, game = {}) => {
-  const color = isWhite ? "white" : "black";
-  let movesChecked = 0;
-  const pieceMoves = {};
-  
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const piece = board[r][c];
       if (!piece || !isFriendlyPiece(piece, isWhite)) continue;
       
       const validMoves = getValidMoves(board, r, c, isWhite, game);
-      if (validMoves.length === 0) continue;
-      
-      const pieceName = `${piece}@[${r},${c}]`;
-      pieceMoves[pieceName] = [];
-      
       for (const [tr, tc] of validMoves) {
-        movesChecked++;
-        
-        // Simulate the move on a test board
         const testBoard = clone(board);
         if (getPieceType(piece) === "p" && game.enPassantTarget && tr === game.enPassantTarget[0] && tc === game.enPassantTarget[1] && c !== tc) {
           const capturedPawnRow = tr + (isWhite ? 1 : -1);
           testBoard[capturedPawnRow][tc] = "";
         }
-        
         testBoard[tr][tc] = piece;
         testBoard[r][c] = "";
-        
-        const stillInCheck = isInCheck(testBoard, isWhite);
-        
-        if (!stillInCheck) {
-          console.log(`✅ LEGAL MOVE FOUND: ${piece} from [${r},${c}] to [${tr},${tc}]${board[tr][tc] ? ` (captures ${board[tr][tc]})` : ""}`);
-          pieceMoves[pieceName].push(`[${tr},${tc}]LEGAL`);
-          return true;
-        } else {
-          pieceMoves[pieceName].push(`[${tr},${tc}]blocked`);
-        }
+        if (!isInCheck(testBoard, isWhite)) return true;
       }
     }
   }
-  
-  console.log(`❌ NO LEGAL MOVES for ${color}.`);
-  console.log(`   Pieces with moves and their outcomes:`);
-  Object.entries(pieceMoves).forEach(([piece, moves]) => {
-    console.log(`     ${piece}: ${moves.join(", ")}`);
-  });
-  console.log(`   Total move combinations checked: ${movesChecked}`);
   return false;
 };
 
 const getGameStatus = (board, turn, game = {}) => {
   const isWhiteTurn = turn === "white";
-  
-  if (game.halfMoveClock >= 100) {
-    console.log(`🤝 DRAW! Fifty-move rule.`);
-    return { status: "draw", reason: "fifty-move rule" };
-  }
+  if (game.halfMoveClock >= 100) return { status: "draw", reason: "fifty-move rule" };
 
   const pieces = [];
   for (let r = 0; r < 8; r++) {
@@ -307,34 +267,17 @@ const getGameStatus = (board, turn, game = {}) => {
     }
   }
   
-  const pCount = pieces.length;
-  if (pCount === 2) {
-    return { status: "draw", reason: "insufficient material" };
-  } else if (pCount === 3) {
-    if (pieces.includes("n") || pieces.includes("b")) {
-      return { status: "draw", reason: "insufficient material" };
-    }
-  }
+  if (pieces.length === 2) return { status: "draw", reason: "insufficient material" };
+  if (pieces.length === 3 && (pieces.includes("n") || pieces.includes("b"))) return { status: "draw", reason: "insufficient material" };
 
   const inCheck = isInCheck(board, isWhiteTurn);
   const hasMovesAvailable = hasLegalMoves(board, isWhiteTurn, game);
   
-  console.log(`📊 Game Status Check for ${turn}: inCheck=${inCheck}, hasMovesAvailable=${hasMovesAvailable}`);
-  
   if (inCheck) {
-    if (!hasMovesAvailable) {
-      console.log(`🏁 CHECKMATE! ${isWhiteTurn ? "Black" : "White"} wins!`);
-      return { status: "checkmate", winner: isWhiteTurn ? "black" : "white" };
-    }
-    console.log(`⚠️  CHECK! ${turn} is in check but has legal moves.`);
+    if (!hasMovesAvailable) return { status: "checkmate", winner: isWhiteTurn ? "black" : "white" };
     return { status: "check" };
   }
-  
-  if (!hasMovesAvailable) {
-    console.log(`🤝 STALEMATE! The game is a draw.`);
-    return { status: "stalemate" };
-  }
-  
+  if (!hasMovesAvailable) return { status: "stalemate" };
   return { status: "active" };
 };
 
@@ -355,8 +298,7 @@ if (typeof module !== "undefined" && module.exports) {
     hasLegalMoves,
     getGameStatus
   };
-}
-else if (typeof window !== "undefined") {
+} else if (typeof window !== "undefined") {
   window.ChessRules = {
     clone,
     getPieceType,
