@@ -93,7 +93,33 @@ socket.on("start", (d) => {
   updateGameActions();
 });
 
+let lastMoveCount = 0;
+let lastCheckMoveCount = 0;
 socket.on("update", (d) => {
+  const newMovesCount = d.history?.moves?.length || 0;
+  let moveSoundPlayed = false;
+  if (newMovesCount > lastMoveCount) {
+    const lastMove = d.history.moves[newMovesCount - 1];
+    if (lastMove && lastMove.captured) {
+        if (window.sounds) window.sounds.capture();
+    } else {
+        if (window.sounds) window.sounds.move();
+    }
+    lastMoveCount = newMovesCount;
+    moveSoundPlayed = true;
+  }
+  
+  if (d.gameStatus && (d.gameStatus.status === "check" || d.gameStatus.status === "checkmate")) {
+      if (lastMoveCount > lastCheckMoveCount) {
+          if (window.sounds) {
+              // Delay slightly if a move sound just played
+              if (moveSoundPlayed) setTimeout(() => window.sounds.check(), 200);
+              else window.sounds.check();
+          }
+          lastCheckMoveCount = lastMoveCount;
+      }
+  }
+
   board = d.board;
   turn = d.turn;
   gameStatus = d.gameStatus || { status: "active" };
@@ -164,6 +190,7 @@ socket.on("moveConfirmed", (d) => {
 });
 
 socket.on("moveRejected", (d) => {
+  if (window.sounds) window.sounds.error();
   moveInFlight = false;
   log(`❌ Move rejected: ${d.reason}`, "error");
   selected = null;
@@ -177,6 +204,7 @@ socket.on("powerConfirmed", (d) => {
 });
 
 socket.on("powerRejected", (d) => {
+  if (window.sounds) window.sounds.error();
   moveInFlight = false;
   log(`❌ Power rejected: ${d.reason}`, "error");
 });
@@ -243,9 +271,9 @@ function canSendActions() {
 }
 
 function isPromotionMove(fromR, toR, pieceChar) {
-  const type = getPieceType(pieceChar);
+  const type = window.ChessRules.getPieceType(pieceChar);
   if (type !== "p") return false;
-  const isWhite = isWhitePiece(pieceChar);
+  const isWhite = window.ChessRules.isWhitePiece(pieceChar);
   return (isWhite && toR === 0) || (!isWhite && toR === 7);
 }
 

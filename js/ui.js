@@ -41,8 +41,32 @@ const reviewNextBtnEl = document.getElementById("reviewNextBtn");
 const reviewSliderEl = document.getElementById("reviewSlider");
 const reviewMovesEl = document.getElementById("reviewMoves");
 const reviewMetaEl = document.getElementById("reviewMeta");
-// LOGGING
+// LOGGING & SOUNDS
 // =========================
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+const playTone = (freq, type, duration, vol = 0.1) => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+};
+
+window.sounds = {
+  move: () => playTone(300, 'sine', 0.1, 0.2),
+  capture: () => playTone(150, 'square', 0.15, 0.2),
+  check: () => playTone(400, 'triangle', 0.3, 0.3),
+  error: () => playTone(100, 'sawtooth', 0.2, 0.2)
+};
+
 function log(message, type = "info") {
   const entry = document.createElement("div");
   entry.className = `log-entry ${type}`;

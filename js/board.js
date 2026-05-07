@@ -13,12 +13,20 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
       const sq = document.createElement("div");
       sq.className = "square " + ((r + c) % 2 ? "black" : "white");
 
+      const lastMove = matchHistory?.moves?.[matchHistory.moves.length - 1];
+      if (lastMove && lastMove.from && lastMove.to) {
+        if ((r === lastMove.from[0] && c === lastMove.from[1]) ||
+            (r === lastMove.to[0] && c === lastMove.to[1])) {
+          sq.classList.add("last-move");
+        }
+      }
+
       const piece = boardToRender[r][c];
       if (piece) {
         const pieceEl = document.createElement("span");
-        const isKing = getPieceType(piece) === "k";
+        const isKing = window.ChessRules.getPieceType(piece) === "k";
         const kingClass = (mode === "powered-king" && isKing) ? " piece-king" : "";
-        pieceEl.className = `piece ${isWhitePiece(piece) ? "piece-white" : "piece-black"}${kingClass}`;
+        pieceEl.className = `piece ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}${kingClass}`;
         pieceEl.textContent = symbols[piece] || "";
         sq.appendChild(pieceEl);
       }
@@ -59,8 +67,8 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
           return;
         }
         
-        const isWhite = isWhitePiece(piece);
-        if (!isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
+        const isWhite = window.ChessRules.isWhitePiece(piece);
+        if (!window.ChessRules.isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
           e.preventDefault();
           return;
         }
@@ -166,8 +174,8 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
           return;
         }
 
-        const isWhite = isWhitePiece(piece);
-        if (!isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
+        const isWhite = window.ChessRules.isWhitePiece(piece);
+        if (!window.ChessRules.isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
           log("That piece is not yours!", "error");
           selected = null;
           validMoves = [];
@@ -176,7 +184,7 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
         }
 
         selected = [r, c];
-        validMoves = getValidMoves(r, c);
+        validMoves = getValidMovesPreview(r, c);
         log(`Selected piece at [${r},${c}]. ${validMoves.length} valid moves available.`, "info");
         render();
       });
@@ -205,14 +213,12 @@ function render() {
     validMoves = [];
 
     boardEl.style.display = "grid";
-    boardEl.style.gridTemplateColumns = "repeat(8, 72px)";
 
     renderBoard(boardEl, board, { interactive: false });
     return;
   }
 
   boardEl.style.display = "grid";
-  boardEl.style.gridTemplateColumns = "repeat(8, 72px)";
   renderBoard(boardEl, board, { interactive: true });
 }
 
@@ -238,14 +244,14 @@ function renderCaptured() {
 
   capturedWhite.forEach(piece => {
     const token = document.createElement("div");
-    token.className = `capture-token ${isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
+    token.className = `capture-token ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
     token.textContent = symbols[piece] || "";
     whiteCapturedEl.appendChild(token);
   });
 
   capturedBlack.forEach(piece => {
     const token = document.createElement("div");
-    token.className = `capture-token ${isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
+    token.className = `capture-token ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
     token.textContent = symbols[piece] || "";
     blackCapturedEl.appendChild(token);
   });
