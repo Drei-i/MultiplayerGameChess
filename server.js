@@ -863,7 +863,7 @@ io.on("connection", (socket) => {
     socket.emit("drawOfferSent");
 
     const oppColor = getOpponentColor(playerColor);
-    const oppSocketId = game.players[oppColor];
+    const oppSocketId = game.players[oppColor]?.socketId;
     if (oppSocketId) {
       io.to(oppSocketId).emit("drawOffered", { from: playerColor });
     }
@@ -905,7 +905,7 @@ io.on("connection", (socket) => {
 
     const accept = Boolean(data.accept);
     const offererColor = game.drawOfferFrom;
-    const offererSocketId = game.players[offererColor];
+    const offererSocketId = game.players[offererColor]?.socketId;
     game.drawOfferFrom = null;
 
     if (accept) {
@@ -1088,7 +1088,7 @@ io.on("connection", (socket) => {
   });
 });
 
-setInterval(() => {
+const runGarbageCollection = () => {
   const now = Date.now();
   for (const room in rooms) {
     const game = rooms[room];
@@ -1100,9 +1100,25 @@ setInterval(() => {
       delete rooms[room];
     }
   }
-}, 60 * 1000);
+};
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  setInterval(runGarbageCollection, 60 * 1000);
+}
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  http.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = {
+  GAME_MODES,
+  START_BOARD,
+  normalizeMode,
+  buildFogBoardForColor,
+  isMoveLegal,
+  getValidMoves,
+  runGarbageCollection
+};
