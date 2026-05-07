@@ -4,7 +4,8 @@ const {
   GAME_MODES,
   START_BOARD,
   normalizeMode,
-  buildFogBoardForColor
+  buildFogBoardForColor,
+  buildClientGameState
 } = require("./server");
 
 test("normalizeMode accepts known game modes", () => {
@@ -35,4 +36,36 @@ test("fog-of-war hides non-visible squares from black perspective", () => {
 
   assert.equal(fogBoard[0][4], "k");
   assert.equal(fogBoard[7][4], "");
+});
+
+test("client game state excludes reconnect tokens and socket ids", () => {
+  const game = {
+    mode: GAME_MODES.REGULAR,
+    board: START_BOARD(),
+    turn: "white",
+    players: {
+      white: { socketId: "sock-1", reconnectToken: "secret-white" },
+      black: { socketId: "sock-2", reconnectToken: "secret-black" }
+    },
+    history: { boards: [], moves: [] },
+    manualStatus: null,
+    drawOfferFrom: null,
+    capturedWhite: [],
+    capturedBlack: [],
+    halfMoveClock: 0,
+    positionCounts: {},
+    lastActivity: Date.now(),
+    castling: {
+      white: { kingside: true, queenside: true },
+      black: { kingside: true, queenside: true }
+    },
+    enPassantTarget: null,
+    poweredKing: null
+  };
+
+  const state = buildClientGameState(game);
+
+  assert.equal(state.players, undefined);
+  assert.equal(JSON.stringify(state).includes("reconnectToken"), false);
+  assert.equal(JSON.stringify(state).includes("socketId"), false);
 });

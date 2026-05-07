@@ -104,6 +104,23 @@ const buildFogBoardForColor = (board, color) => {
   return masked;
 };
 
+const buildClientGameState = (game, boardOverride = null) => ({
+  mode: game.mode,
+  board: boardOverride ?? game.board,
+  turn: game.turn,
+  history: game.history,
+  manualStatus: game.manualStatus,
+  drawOfferFrom: game.drawOfferFrom,
+  capturedWhite: game.capturedWhite,
+  capturedBlack: game.capturedBlack,
+  halfMoveClock: game.halfMoveClock,
+  positionCounts: game.positionCounts,
+  lastActivity: game.lastActivity,
+  castling: game.castling,
+  enPassantTarget: game.enPassantTarget,
+  poweredKing: game.poweredKing
+});
+
 const emitGameUpdate = (room) => {
   const game = rooms[room];
   if (!game) return;
@@ -111,23 +128,24 @@ const emitGameUpdate = (room) => {
   const computedStatus = getGameStatus(game.board, game.turn, game);
   const gameStatus = game.manualStatus ? game.manualStatus : computedStatus;
 
-  const basePayload = {
-    ...game,
-    gameStatus
-  };
-
   if (game.mode === GAME_MODES.FOG_OF_WAR) {
     for (const color of ["white", "black"]) {
       const socketId = game.players[color]?.socketId;
       if (!socketId) continue;
       const fogBoard = buildFogBoardForColor(game.board, color);
-      io.to(socketId).emit("update", { ...basePayload, board: fogBoard });
+      io.to(socketId).emit("update", {
+        ...buildClientGameState(game, fogBoard),
+        gameStatus
+      });
     }
     return;
   }
 
 
-  io.to(room).emit("update", basePayload);
+  io.to(room).emit("update", {
+    ...buildClientGameState(game),
+    gameStatus
+  });
 
 };
 
@@ -1118,6 +1136,7 @@ module.exports = {
   START_BOARD,
   normalizeMode,
   buildFogBoardForColor,
+  buildClientGameState,
   isMoveLegal,
   getValidMoves,
   runGarbageCollection

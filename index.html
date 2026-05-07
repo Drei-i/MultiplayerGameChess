@@ -639,7 +639,6 @@ socket.on("queueCancelled", () => {
   cancelQueueBtnEl.disabled = true;
   lobbyControlsEl.style.display = "flex";
   updateTopPanelVisibility();
-  updateTopPanelVisibility();
   statusEl.textContent = "Pick a mode and press Queue.";
   log("Queue cancelled.", "info");
 });
@@ -816,6 +815,10 @@ socket.on("resignRejected", (d) => {
 
 socket.on("connect_error", (error) => {
   log(`Connection error: ${error}`, "error");
+});
+
+socket.on("disconnect", () => {
+  moveInFlight = false;
 });
 
 socket.on("error", (error) => {
@@ -1424,6 +1427,7 @@ statusEl.textContent = "Pick a mode and press Queue.";
 updateTopPanelVisibility();
 
 socket.on("connect", () => {
+  moveInFlight = false;
   try {
     const raw = sessionStorage.getItem(RECONNECT_STORAGE_KEY);
     if (!raw) return;
