@@ -241,22 +241,31 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
 .piece {
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  font-family: "Segoe UI Symbol", "DejaVu Sans", "Arial Unicode MS", "Apple Symbols", sans-serif;
+  line-height: 1;
+  font-variant-emoji: text;
 }
 
+
 .piece-white {
-  color: #fff;
-  text-shadow: 0 0 1px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.2);
+  color: #ffffff !important;
+  text-shadow: 0 0 2px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .piece-black {
-  color: #1a1a1a;
-  text-shadow: 0 0 1px rgba(255,255,255,0.3);
+  color: #1a1a1a !important;
+  text-shadow: 0 0 1px rgba(255,255,255,0.4);
+}
+
+body.dark-mode .piece-white {
+  color: #ffffff !important;
 }
 
 body.dark-mode .piece-black {
-  color: #000;
-  text-shadow: 0 0 1px rgba(255,255,255,0.4);
+  color: #000000 !important;
+  text-shadow: 0 0 1px rgba(255,255,255,0.5);
 }
+
 
 
 .square.valid-move {
