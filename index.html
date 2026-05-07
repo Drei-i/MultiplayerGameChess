@@ -859,6 +859,15 @@ function sendPower(type, tr, tc) {
   });
 }
 
+function shouldFlipBoard() {
+  return myColor === "black";
+}
+
+function displayToBoardCoords(displayR, displayC, flipped) {
+  if (!flipped) return [displayR, displayC];
+  return [7 - displayR, 7 - displayC];
+}
+
 
 // =========================
 // RENDER
@@ -867,9 +876,11 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
   if (!boardToRender) return;
 
   targetEl.innerHTML = "";
+  const flipped = interactive && shouldFlipBoard();
 
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
+  for (let displayR = 0; displayR < 8; displayR++) {
+    for (let displayC = 0; displayC < 8; displayC++) {
+      const [r, c] = displayToBoardCoords(displayR, displayC, flipped);
 
       const sq = document.createElement("div");
       sq.className = "square " + ((r + c) % 2 ? "black" : "white");
