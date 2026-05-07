@@ -23,8 +23,8 @@ let reviewIndex = 0;
 const RECONNECT_STORAGE_KEY = "chessReconnectState";
 
 const symbols = {
- r:"♜", n:"♞", b:"♝", q:"♛", k:"♚", p:"♟",
- R:"♖", N:"♘", B:"♗", Q:"♕", K:"♔", P:"♙"
+  r: "♜", n: "♞", b: "♝", q: "♛", k: "♚", p: "♟",
+  R: "♜", N: "♞", B: "♝", Q: "♛", K: "♚", P: "♟"
 };
 
 // =========================
