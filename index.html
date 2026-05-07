@@ -167,6 +167,12 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
   gap: 8px;
 }
 
+.capture-score {
+  margin-top: 10px;
+  font-weight: 700;
+  color: #4e644a;
+}
+
 .capture-token {
   width: 32px;
   height: 32px;
@@ -381,6 +387,7 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
   <div class="capture-column" style="display:none;">
     <div class="capture-title">White captured</div>
     <div id="whiteCaptured" class="capture-pieces"></div>
+    <div id="whiteCapturedScore" class="capture-score">Points: 0</div>
   </div>
   <div class="board-wrapper">
     <div class="board" id="board"></div>
@@ -388,6 +395,7 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
   <div class="capture-column" style="display:none;">
     <div class="capture-title">Black captured</div>
     <div id="blackCaptured" class="capture-pieces"></div>
+    <div id="blackCapturedScore" class="capture-score">Points: 0</div>
   </div>
 </div>
 <script>
@@ -416,6 +424,8 @@ const statusEl = document.getElementById("status");
 const logsEl = document.getElementById("logs");
 const whiteCapturedEl = document.getElementById("whiteCaptured");
 const blackCapturedEl = document.getElementById("blackCaptured");
+const whiteCapturedScoreEl = document.getElementById("whiteCapturedScore");
+const blackCapturedScoreEl = document.getElementById("blackCapturedScore");
 const modeSelectEl = document.getElementById("modeSelect");
 const queueBtnEl = document.getElementById("queueBtn");
 const cancelQueueBtnEl = document.getElementById("cancelQueueBtn");
@@ -1110,6 +1120,8 @@ function renderCaptured() {
   // Keep board visible; this function is only about captured pieces.
   whiteCapturedEl.innerHTML = "";
   blackCapturedEl.innerHTML = "";
+  if (whiteCapturedScoreEl) whiteCapturedScoreEl.textContent = "Points: 0";
+  if (blackCapturedScoreEl) blackCapturedScoreEl.textContent = "Points: 0";
 
   if (!inGame) return;
 
@@ -1126,6 +1138,23 @@ function renderCaptured() {
     token.textContent = symbols[piece] || "";
     blackCapturedEl.appendChild(token);
   });
+
+  const piecePoints = {
+    p: 1,
+    n: 3,
+    b: 3,
+    r: 5,
+    q: 9
+  };
+  const sumCapturedPoints = (pieces) => pieces.reduce((sum, p) => {
+    const key = String(p || "").toLowerCase();
+    return sum + (piecePoints[key] || 0);
+  }, 0);
+
+  const whitePoints = sumCapturedPoints(capturedWhite);
+  const blackPoints = sumCapturedPoints(capturedBlack);
+  if (whiteCapturedScoreEl) whiteCapturedScoreEl.textContent = `Points: ${whitePoints}`;
+  if (blackCapturedScoreEl) blackCapturedScoreEl.textContent = `Points: ${blackPoints}`;
 }
 
 function modeLabel(m) {
