@@ -342,3 +342,20 @@ powerCancelBtnEl.addEventListener("click", () => {
 
 statusEl.textContent = "Pick a mode and press Queue.";
 updateTopPanelVisibility();
+
+// DARK MODE
+const darkModeToggleBtn = document.getElementById("darkModeToggle");
+if (darkModeToggleBtn) {
+  const isDark = localStorage.getItem("darkMode") === "true";
+  if (isDark) {
+    document.body.classList.add("dark-mode");
+    darkModeToggleBtn.textContent = "☀️";
+  }
+  
+  darkModeToggleBtn.addEventListener("click", () => {
+    document.body.classList.toggle("dark-mode");
+    const nowDark = document.body.classList.contains("dark-mode");
+    localStorage.setItem("darkMode", nowDark);
+    darkModeToggleBtn.textContent = nowDark ? "☀️" : "🌙";
+  });
+}

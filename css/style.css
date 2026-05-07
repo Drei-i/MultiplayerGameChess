@@ -294,3 +294,67 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
 .log-entry.info {
   color: #4e5a44;
 }
+
+/* Dark Mode Overrides */
+body.dark-mode {
+  background: radial-gradient(circle at top, #1a221a 0%, #111511 35%, #080a08 100%);
+  color: #e2e8e2;
+}
+
+body.dark-mode .top-panel,
+body.dark-mode .below-board-panel,
+body.dark-mode .capture-column,
+body.dark-mode #status,
+body.dark-mode #logs,
+body.dark-mode #modalOverlay > div,
+body.dark-mode #promotionOverlay > div,
+body.dark-mode #endOverlay > div,
+body.dark-mode #reviewOverlay > div {
+  background: rgba(30, 38, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e2e8e2;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+body.dark-mode .label,
+body.dark-mode .capture-title,
+body.dark-mode .capture-score {
+  color: #9cb39a;
+}
+
+body.dark-mode select,
+body.dark-mode button {
+  background: #2a352a;
+  color: #e2e8e2;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode button:hover {
+  background: #344234;
+}
+
+body.dark-mode .white {
+  background: #9aa891;
+  color: #111;
+}
+
+body.dark-mode .black {
+  background: #475d3c;
+  color: #eee;
+}
+
+body.dark-mode .square.last-move {
+  background-color: rgba(255, 255, 100, 0.3);
+}
+
+body.dark-mode .pill,
+body.dark-mode .capture-token {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .log-entry {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+body.dark-mode .log-entry.info { color: #a1b09f; }
+body.dark-mode .log-entry.success { color: #61b365; }
+body.dark-mode .log-entry.error { color: #d66565; }
