@@ -283,7 +283,7 @@ button[disabled] { opacity: 0.6; cursor: not-allowed; }
 <body>
 
 <h1>♔ Chess Multiplayer ♚</h1>
-<div class="top-panel">
+<div class="top-panel" id="topPanel">
   <div class="control-group" id="lobbyControls">
     <div class="label">Mode</div>
     <select id="modeSelect">
@@ -419,6 +419,7 @@ const blackCapturedEl = document.getElementById("blackCaptured");
 const modeSelectEl = document.getElementById("modeSelect");
 const queueBtnEl = document.getElementById("queueBtn");
 const cancelQueueBtnEl = document.getElementById("cancelQueueBtn");
+const topPanelEl = document.getElementById("topPanel");
 const lobbyControlsEl = document.getElementById("lobbyControls");
 const powerPanelEl = document.getElementById("powerPanel");
 const powerFreezeBtnEl = document.getElementById("powerFreezeBtn");
@@ -616,6 +617,7 @@ socket.on("queued", (d) => {
   queueBtnEl.disabled = true;
   cancelQueueBtnEl.disabled = false;
   lobbyControlsEl.style.display = "flex";
+  updateTopPanelVisibility();
   statusEl.textContent = `⏳ Queued for ${modeLabel(mode)}... (position ${d.position})`;
   log(`Queued for mode: ${mode} (position ${d.position})`, "info");
 });
@@ -626,6 +628,8 @@ socket.on("queueCancelled", () => {
   queueBtnEl.disabled = false;
   cancelQueueBtnEl.disabled = true;
   lobbyControlsEl.style.display = "flex";
+  updateTopPanelVisibility();
+  updateTopPanelVisibility();
   statusEl.textContent = "Pick a mode and press Queue.";
   log("Queue cancelled.", "info");
 });
@@ -637,6 +641,7 @@ socket.on("queueRejected", (d) => {
   queueBtnEl.disabled = false;
   cancelQueueBtnEl.disabled = true;
   lobbyControlsEl.style.display = "flex";
+  updateTopPanelVisibility();
 });
 
 socket.on("start", (d) => {
@@ -654,6 +659,7 @@ socket.on("start", (d) => {
   queueBtnEl.disabled = true;
   cancelQueueBtnEl.disabled = true;
   lobbyControlsEl.style.display = "none";
+  updateTopPanelVisibility();
   endOverlayEl.style.display = "none";
   reviewOverlayEl.style.display = "none";
 
@@ -713,6 +719,7 @@ socket.on("update", (d) => {
 
   const inGame = Boolean(room && myColor);
   lobbyControlsEl.style.display = inGame ? "none" : "flex";
+  updateTopPanelVisibility();
 
   if (inGame && isGameOverStatus(gameStatus.status)) {
     // End-of-match window
@@ -1128,6 +1135,13 @@ function modeLabel(m) {
   return m || "Unknown";
 }
 
+function updateTopPanelVisibility() {
+  if (!topPanelEl) return;
+  const lobbyVisible = lobbyControlsEl.style.display !== "none";
+  const powerVisible = powerPanelEl.classList.contains("active");
+  topPanelEl.style.display = (lobbyVisible || powerVisible) ? "flex" : "none";
+}
+
 function updatePowerPanel() {
   const shouldShow = mode === "powered-king" && myColor;
   powerPanelEl.classList.toggle("active", shouldShow);
@@ -1139,6 +1153,7 @@ function updatePowerPanel() {
   powerTeleportBtnEl.disabled = disabled;
   powerSwapBtnEl.disabled = disabled;
   powerCancelBtnEl.disabled = !pendingPower;
+  updateTopPanelVisibility();
 }
 
 function updateGameActions() {
@@ -1377,6 +1392,7 @@ powerCancelBtnEl.addEventListener("click", () => {
 });
 
 statusEl.textContent = "Pick a mode and press Queue.";
+updateTopPanelVisibility();
 
 socket.on("connect", () => {
   try {
