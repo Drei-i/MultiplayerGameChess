@@ -15,13 +15,22 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
 
       const lastMove = matchHistory?.moves?.[matchHistory.moves.length - 1];
       if (lastMove && lastMove.from && lastMove.to) {
-        if ((r === lastMove.from[0] && c === lastMove.from[1]) ||
-            (r === lastMove.to[0] && c === lastMove.to[1])) {
+        const isFromVisible = boardToRender[lastMove.from[0]][lastMove.from[1]] !== null;
+        const isToVisible = boardToRender[lastMove.to[0]][lastMove.to[1]] !== null;
+
+        if (r === lastMove.from[0] && c === lastMove.from[1] && isFromVisible) {
+          sq.classList.add("last-move");
+        }
+        if (r === lastMove.to[0] && c === lastMove.to[1] && isToVisible) {
           sq.classList.add("last-move");
         }
       }
 
       const piece = boardToRender[r][c];
+      if (piece === null) {
+        sq.classList.add("fog");
+      }
+
       if (piece) {
         const pieceEl = document.createElement("span");
         const isKing = window.ChessRules.getPieceType(piece) === "k";
@@ -40,6 +49,16 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
         // Highlight valid moves
         if (validMoves.some(([vr, vc]) => vr === r && vc === c)) {
           sq.classList.add("valid-move");
+          
+          // Add a physical dot element for guaranteed visibility
+          const dot = document.createElement("div");
+          dot.className = "move-dot";
+          sq.appendChild(dot);
+
+          const targetPiece = boardToRender[r][c];
+          if (targetPiece && !window.ChessRules.isFriendlyPiece(targetPiece, myColor === "white")) {
+            sq.classList.add("valid-capture");
+          }
         }
       }
 
@@ -174,20 +193,14 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
           return;
         }
 
-        const isWhite = window.ChessRules.isWhitePiece(piece);
-        if (!window.ChessRules.isFriendlyPiece(piece, isWhite) || isWhite !== (myColor === "white")) {
-          log("That piece is not yours!", "error");
-          selected = null;
-          validMoves = [];
-          render();
-          return;
-        }
-
+        // Show moves for ANY piece you click (for preview)
         selected = [r, c];
         validMoves = getValidMovesPreview(r, c);
-        log(`Selected piece at [${r},${c}]. ${validMoves.length} valid moves available.`, "info");
+        const pieceName = window.ChessRules.getPieceType(piece).toUpperCase();
+        log(`Previewing moves for ${pieceName} at [${r},${c}]. ${validMoves.length} moves found.`, "info");
         render();
       });
+
 
       targetEl.appendChild(sq);
     }

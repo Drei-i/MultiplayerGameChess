@@ -1,17 +1,19 @@
 const socket = io();
 
 
-let board = null;
-let room = null;
-let myColor = null;
-let turn = "white";
-let selected = null;
-let validMoves = [];
-let draggedPiece = null;
-let gameStatus = { status: "active" };
-let capturedWhite = [];
-let capturedBlack = [];
-let mode = null;
+// SHARED GLOBALS (Attached to window for cross-script access)
+window.board = null;
+window.room = null;
+window.myColor = null;
+window.turn = "white";
+window.selected = null;
+window.validMoves = [];
+window.gameStatus = { status: "active" };
+window.capturedWhite = [];
+window.capturedBlack = [];
+window.mode = null;
+window.gameData = {}; // Store full server update for rules preview
+
 let isQueued = false;
 let pendingPower = null; // "freeze" | "teleport" | "swap"
 let moveInFlight = false; // prevent duplicate rapid sends
@@ -21,6 +23,7 @@ let promotionResolver = null;
 let matchHistory = { boards: [], moves: [] };
 let reviewIndex = 0;
 const RECONNECT_STORAGE_KEY = "chessReconnectState";
+
 
 const symbols = {
   r: "♜", n: "♞", b: "♝", q: "♛", k: "♚", p: "♟",
@@ -120,11 +123,12 @@ socket.on("update", (d) => {
       }
   }
 
-  board = d.board;
-  turn = d.turn;
-  gameStatus = d.gameStatus || { status: "active" };
-  capturedWhite = d.capturedWhite || [];
-  capturedBlack = d.capturedBlack || [];
+  window.board = d.board;
+  window.turn = d.turn;
+  window.gameStatus = d.gameStatus || { status: "active" };
+  window.gameData = d;
+  window.capturedWhite = d.capturedWhite || [];
+  window.capturedBlack = d.capturedBlack || [];
   mode = d.mode || mode;
   if (d.history && Array.isArray(d.history.boards) && Array.isArray(d.history.moves)) {
     matchHistory = d.history;

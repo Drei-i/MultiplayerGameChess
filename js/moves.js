@@ -1,13 +1,28 @@
 
 // PIECE VALIDATION (CLIENT-SIDE PREVIEW)
 // =========================
-const { getPieceType, isWhitePiece, isBlackPiece, isEnemyPiece, isFriendlyPiece, getValidMoves } = window.ChessRules;
 
-// Wrap getValidMoves so it uses the global board and game object if needed, 
-// but wait, the client's getValidMoves was simpler and didn't check for check.
-// Using the server's getValidMoves provides full validation on the client!
+/**
+ * getValidMovesPreview
+ * Calculates moves for the UI to show as dots.
+ */
 window.getValidMovesPreview = function(r, c) {
-    if (!board) return [];
-    // gameStatus and turn are globals
-    return getValidMoves(board, r, c, myColor === "white", {}); // We pass empty game for now, or we can pass game state if we have it
+    // Access globals from window
+    const board = window.board;
+    const gameData = window.gameData;
+    const myColor = window.myColor;
+    const rules = window.ChessRules;
+
+    if (!board || !board[r] || !board[r][c] || !rules) return [];
+
+    const piece = board[r][c];
+    const isWhite = rules.isWhitePiece(piece);
+    
+    try {
+        const moves = rules.getValidMoves(board, r, c, isWhite, gameData || {});
+        return Array.isArray(moves) ? moves : [];
+    } catch (err) {
+        console.error("Move preview error:", err);
+        return [];
+    }
 };
