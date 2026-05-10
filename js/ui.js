@@ -264,7 +264,7 @@ resignBtnEl.addEventListener("click", () => {
     primaryText: "Resign",
     secondaryText: "Cancel",
     onPrimary: () => socket.emit("resign", { room }),
-    onSecondary: () => {}
+    onSecondary: () => { }
   });
 });
 
@@ -351,7 +351,7 @@ if (darkModeToggleBtn) {
     document.body.classList.add("dark-mode");
     darkModeToggleBtn.textContent = "☀️";
   }
-  
+
   darkModeToggleBtn.addEventListener("click", () => {
     document.body.classList.toggle("dark-mode");
     const nowDark = document.body.classList.contains("dark-mode");
