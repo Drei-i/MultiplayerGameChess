@@ -106,32 +106,46 @@ if (cluster.isMaster || cluster.isPrimary) {
       const taskId = `${Date.now()}-${Math.random()}`;
       const game = rooms[data.room];
       if (!game || game.manualStatus) return;
+      
       const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
-      if (game.turn !== playerColor) return;
+      
+      // FIX 1: Prevent Race Condition using a move lock
+      if (game.turn !== playerColor || game.pendingMove) {
+        return socket.emit("moveRejected", { reason: game.pendingMove ? "Move already pending" : "Not your turn" });
+      }
+      
+      // Lock the game
+      game.pendingMove = true;
+      
+      // Safety timeout: Release lock if worker hangs for more than 5s
+      const safetyTimeout = setTimeout(() => {
+        if (game.pendingMove) {
+          console.warn(`[Room ${data.room}] Move validation timed out. Releasing lock.`);
+          game.pendingMove = false;
+        }
+      }, 5000);
 
       const pieceType = chessRules.getPieceType(game.board[data.from[0]][data.from[1]]);
       const captured = game.board[data.to[0]][data.to[1]];
       const isPromo = pieceType === "p" && ((playerColor === "white" && data.to[0] === 0) || (playerColor === "black" && data.to[0] === 7));
 
-      // Delegate validation to a parallel worker
       const worker = Object.values(cluster.workers)[Math.floor(Math.random() * Object.keys(cluster.workers).length)];
       
       const onMessage = (msg) => {
         if (msg.type === "VALIDATION_RESULT" && msg.taskId === taskId) {
           worker.off("message", onMessage);
+          clearTimeout(safetyTimeout);
+          game.pendingMove = false; // Release the lock
           
           if (!msg.isValid) {
             return socket.emit("moveRejected", { reason: "Illegal (validated by worker)" });
           }
 
-          // Move is legal, update state
           applyMove(game, data, playerColor);
           socket.emit("moveConfirmed", { from: data.from, to: data.to, captured, promoted: isPromo });
           
-          // Metrics
           totalMoves++;
           totalMoveTimeMs += (Date.now() - start);
-          
           emitUpdate(data.room);
         }
       };
