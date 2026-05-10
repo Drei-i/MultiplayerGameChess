@@ -30,6 +30,28 @@ const symbols = {
   R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔", P: "♙"
 };
 
+// --- SOUNDS ---
+const audio = {
+  move: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/move-self.mp3"),
+  capture: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/capture.mp3"),
+  check: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/check.mp3"),
+  start: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-start.mp3"),
+  end: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-end.mp3")
+};
+
+function playSound(type) {
+  try {
+    if (audio[type]) {
+      const s = audio[type].cloneNode();
+      s.volume = 0.5;
+      s.play().catch(() => {});
+    }
+  } catch (e) {
+    console.warn("Sound play failed", e);
+  }
+}
+
+
 // =========================
 // SOCKET EVENTS
 // =========================
@@ -96,32 +118,8 @@ socket.on("start", (d) => {
   updateGameActions();
 });
 
-let lastMoveCount = 0;
-let lastCheckMoveCount = 0;
 socket.on("update", (d) => {
-  const newMovesCount = d.history?.moves?.length || 0;
-  let moveSoundPlayed = false;
-  if (newMovesCount > lastMoveCount) {
-    const lastMove = d.history.moves[newMovesCount - 1];
-    if (lastMove && lastMove.captured) {
-        if (window.sounds) window.sounds.capture();
-    } else {
-        if (window.sounds) window.sounds.move();
-    }
-    lastMoveCount = newMovesCount;
-    moveSoundPlayed = true;
-  }
-  
-  if (d.gameStatus && (d.gameStatus.status === "check" || d.gameStatus.status === "checkmate")) {
-      if (lastMoveCount > lastCheckMoveCount) {
-          if (window.sounds) {
-              // Delay slightly if a move sound just played
-              if (moveSoundPlayed) setTimeout(() => window.sounds.check(), 200);
-              else window.sounds.check();
-          }
-          lastCheckMoveCount = lastMoveCount;
-      }
-  }
+
 
   window.board = d.board;
   window.turn = d.turn;
@@ -184,9 +182,31 @@ socket.on("update", (d) => {
     reviewOverlayEl.style.display = "none";
   }
 
-  render();
-  renderCaptured();
+  // Play sound and trigger effects for last move
+  if (d.history && d.history.moves && d.history.moves.length > 0) {
+    const lastMove = d.history.moves[d.history.moves.length - 1];
+    
+    // Trigger visual effects
+    if (typeof triggerMoveTrail === "function") {
+      triggerMoveTrail(lastMove.from, lastMove.to);
+    }
+    
+    if (lastMove.captured) {
+      playSound("capture");
+      if (typeof triggerCaptureEffect === "function") {
+        triggerCaptureEffect(lastMove.to[0], lastMove.to[1]);
+      }
+    } else if (window.gameStatus.status === "check") {
+      playSound("check");
+    } else {
+      playSound("move");
+    }
+  }
+
+  if (typeof render === "function") render();
+  if (typeof renderCaptured === "function") renderCaptured();
 });
+
 
 socket.on("moveConfirmed", (d) => {
   moveInFlight = false;
@@ -265,6 +285,18 @@ socket.on("disconnect", () => {
 
 socket.on("error", (error) => {
   log(`Server error: ${error}`, "error");
+});
+
+socket.on("opponentDisconnected", (d) => {
+  log(`⚠️ Opponent (${d.color}) disconnected!`, "error");
+  showModal({
+    title: "Opponent Left",
+    message: "Your opponent has disconnected from the match. You can wait a moment or return to the lobby.",
+    primaryText: "Wait",
+    secondaryText: "Lobby",
+    onPrimary: () => {},
+    onSecondary: () => resetToLobbyUi({ clearBoard: true })
+  });
 });
 
 // =========================

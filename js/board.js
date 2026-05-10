@@ -12,6 +12,7 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
 
       const sq = document.createElement("div");
       sq.className = "square " + ((r + c) % 2 ? "black" : "white");
+      sq.dataset.pos = `${r},${c}`;
 
       const lastMove = matchHistory?.moves?.[matchHistory.moves.length - 1];
       if (lastMove && lastMove.from && lastMove.to) {
@@ -193,11 +194,18 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
           return;
         }
 
-        // Show moves for ANY piece you click (for preview)
+        // Only allow selecting friendly pieces
+        const isWhite = window.ChessRules.isWhitePiece(piece);
+        if (!window.ChessRules.isFriendlyPiece(piece, myColor === "white")) {
+          log("You can only move your own pieces!", "error");
+          return;
+        }
+
+        // Show moves for your own piece
         selected = [r, c];
         validMoves = getValidMovesPreview(r, c);
         const pieceName = window.ChessRules.getPieceType(piece).toUpperCase();
-        log(`Previewing moves for ${pieceName} at [${r},${c}]. ${validMoves.length} moves found.`, "info");
+        log(`Selected ${pieceName} at [${r},${c}]. ${validMoves.length} moves found.`, "info");
         render();
       });
 
@@ -287,8 +295,65 @@ function renderCaptured() {
   if (blackCapturedScoreEl) blackCapturedScoreEl.textContent = `Points: ${blackPoints}`;
 }
 
-// Guaranteed initial render (opening/lobby window)
-// Shows the starting board immediately and keeps captured/actions hidden.
+function triggerCaptureEffect(r, c) {
+  const sq = document.querySelector(`.square[data-pos="${r},${c}"]`);
+  if (!sq) return;
+  const rect = sq.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+
+  // Reduced particle count for performance
+  for (let i = 0; i < 8; i++) {
+    const p = document.createElement("div");
+    p.className = "particle";
+    p.style.left = centerX + "px";
+    p.style.top = centerY + "px";
+    p.style.width = Math.random() * 6 + 2 + "px";
+    p.style.height = p.style.width;
+    p.style.backgroundColor = i % 2 === 0 ? "#fff" : "#ff4d4d";
+    
+    const tx = (Math.random() - 0.5) * 150;
+    const ty = (Math.random() - 0.5) * 150;
+    p.style.setProperty("--tx", tx + "px");
+    p.style.setProperty("--ty", ty + "px");
+    
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 800);
+  }
+}
+
+function triggerMoveTrail(from, to) {
+  const fSq = document.querySelector(`.square[data-pos="${from[0]},${from[1]}"]`);
+  const tSq = document.querySelector(`.square[data-pos="${to[0]},${to[1]}"]`);
+  if (!fSq || !tSq) return;
+
+  const fRect = fSq.getBoundingClientRect();
+  const tRect = tSq.getBoundingClientRect();
+  
+  const startX = fRect.left + fRect.width / 2;
+  const startY = fRect.top + fRect.height / 2;
+  const endX = tRect.left + tRect.width / 2;
+  const endY = tRect.top + tRect.height / 2;
+
+  // Reduced steps for better performance
+  const steps = 6;
+  for (let i = 0; i <= steps; i++) {
+    setTimeout(() => {
+      const node = document.createElement("div");
+      node.className = "trail-node";
+      node.style.left = startX + (endX - startX) * (i / steps) + "px";
+      node.style.top = startY + (endY - startY) * (i / steps) + "px";
+      document.body.appendChild(node);
+      setTimeout(() => node.remove(), 500);
+    }, i * 30);
+  }
+}
+
+// Attach to window
+window.triggerCaptureEffect = triggerCaptureEffect;
+window.triggerMoveTrail = triggerMoveTrail;
+
+// Guaranteed initial render
 try {
   boardEl.style.display = 'block';
   boardEl.style.visibility = 'visible';

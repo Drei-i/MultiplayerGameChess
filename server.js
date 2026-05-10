@@ -18,7 +18,9 @@ const crypto = require("crypto");
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
+const path = require("path");
 const chessRules = require("./js/chess-rules.js");
+
 
 const isTestMode = process.env.NODE_ENV === 'test';
 
@@ -38,6 +40,7 @@ if (cluster.isMaster || cluster.isPrimary) {
 
   const rooms = {};
   const queues = { "regular": [], "powered-king": [], "fog-of-war": [] };
+  const socketToRoom = {}; // Track which room each socket is in
   let totalMoves = 0;
   let totalMoveTimeMs = 0;
 
@@ -48,10 +51,15 @@ if (cluster.isMaster || cluster.isPrimary) {
       roomCount: Object.keys(rooms).length,
       totalMoves,
       averageLatencyMs: totalMoves > 0 ? (totalMoveTimeMs / totalMoves).toFixed(2) : 0,
-      workerCount: workers.length,
+      workerCount: Object.keys(cluster.workers).length,
       uptime: process.uptime()
     });
   });
+
+  app.get("/dashboard", (req, res) => {
+    res.sendFile(path.join(__dirname, "dashboard.html"));
+  });
+
 
   app.get("/health", (req, res) => res.json({ status: "ok", role: "coordinator" }));
 
@@ -84,6 +92,8 @@ if (cluster.isMaster || cluster.isPrimary) {
         const s2 = io.sockets.sockets.get(p2Id);
         if (s1) s1.join(room);
         if (s2) s2.join(room);
+        socketToRoom[p1Id] = room;
+        socketToRoom[p2Id] = room;
 
         io.to(p1Id).emit("start", { color: "white", room, mode, token: token1 });
         io.to(p2Id).emit("start", { color: "black", room, mode, token: token2 });
@@ -92,26 +102,50 @@ if (cluster.isMaster || cluster.isPrimary) {
     });
 
     socket.on("move", (data) => {
-      const start = process.hrtime.bigint();
+      const start = Date.now();
+      const taskId = `${Date.now()}-${Math.random()}`;
       const game = rooms[data.room];
       if (!game || game.manualStatus) return;
       const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
       if (game.turn !== playerColor) return;
 
-      if (!chessRules.isMoveLegal(game.board, data.from, data.to, playerColor === "white", game)) {
-        return socket.emit("moveRejected", { reason: "Illegal" });
-      }
-
       const pieceType = chessRules.getPieceType(game.board[data.from[0]][data.from[1]]);
       const captured = game.board[data.to[0]][data.to[1]];
       const isPromo = pieceType === "p" && ((playerColor === "white" && data.to[0] === 0) || (playerColor === "black" && data.to[0] === 7));
 
-      applyMove(game, data, playerColor);
-      socket.emit("moveConfirmed", { from: data.from, to: data.to, captured, promoted: isPromo });
+      // Delegate validation to a parallel worker
+      const worker = Object.values(cluster.workers)[Math.floor(Math.random() * Object.keys(cluster.workers).length)];
       
-      totalMoves++;
-      totalMoveTimeMs += Number(process.hrtime.bigint() - start) / 1000000;
-      emitUpdate(data.room);
+      const onMessage = (msg) => {
+        if (msg.type === "VALIDATION_RESULT" && msg.taskId === taskId) {
+          worker.off("message", onMessage);
+          
+          if (!msg.isValid) {
+            return socket.emit("moveRejected", { reason: "Illegal (validated by worker)" });
+          }
+
+          // Move is legal, update state
+          applyMove(game, data, playerColor);
+          socket.emit("moveConfirmed", { from: data.from, to: data.to, captured, promoted: isPromo });
+          
+          // Metrics
+          totalMoves++;
+          totalMoveTimeMs += (Date.now() - start);
+          
+          emitUpdate(data.room);
+        }
+      };
+
+      worker.on("message", onMessage);
+      worker.send({ 
+        type: "VALIDATE_MOVE", 
+        taskId, 
+        board: game.board, 
+        from: data.from, 
+        to: data.to, 
+        isWhite: (playerColor === "white"), 
+        gameData: game 
+      });
     });
 
     socket.on("resign", (data) => {
@@ -150,6 +184,20 @@ if (cluster.isMaster || cluster.isPrimary) {
 
     socket.on("disconnect", () => {
       for (const m in queues) queues[m] = queues[m].filter(id => id !== socket.id);
+      
+      const room = socketToRoom[socket.id];
+      if (room && rooms[room]) {
+        const game = rooms[room];
+        const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
+        const oppColor = playerColor === "white" ? "black" : "white";
+        const oppSid = game.players[oppColor].socketId;
+        
+        // Notify the opponent
+        io.to(oppSid).emit("opponentDisconnected", { color: playerColor });
+        
+        // Clean up mapping
+        delete socketToRoom[socket.id];
+      }
     });
   });
 
@@ -192,28 +240,22 @@ if (cluster.isMaster || cluster.isPrimary) {
   function buildFogBoard(board, color) {
     const isWhite = color === "white";
     return Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => {
-      // 1. You always see your own pieces
       const p = board[r][c];
       if (p && chessRules.isFriendlyPiece(p, isWhite)) return p;
-
-      // 2. You see squares adjacent to your pieces
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           const nr = r + dr, nc = c + dc;
           if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
             const neighbor = board[nr][nc];
             if (neighbor && chessRules.isFriendlyPiece(neighbor, isWhite)) {
-              return p || ""; // Found a friendly piece nearby, so square is visible (show piece or empty)
+              return p || "";
             }
           }
         }
       }
-      
-      // 3. Otherwise, the square is hidden by fog
       return null;
     }));
   }
-
 
   function START_BOARD() {
     return [
@@ -224,11 +266,26 @@ if (cluster.isMaster || cluster.isPrimary) {
     ];
   }
 
+
+
+  // --- SERVER START ---
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => console.log(`[Master] Server online at http://localhost:${PORT}`));
 
 } else {
   // Worker process
+  const chessRules = require("./js/chess-rules.js");
+
+  process.on("message", (msg) => {
+    if (msg.type === "VALIDATE_MOVE") {
+      try {
+        const isValid = chessRules.isMoveLegal(msg.board, msg.from, msg.to, msg.isWhite, msg.gameData);
+        process.send({ type: "VALIDATION_RESULT", taskId: msg.taskId, isValid });
+      } catch (err) {
+        process.send({ type: "VALIDATION_RESULT", taskId: msg.taskId, isValid: false });
+      }
+    }
+  });
 }
 
 if (isTestMode) {

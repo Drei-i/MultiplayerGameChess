@@ -346,7 +346,7 @@ updateTopPanelVisibility();
 // DARK MODE
 const darkModeToggleBtn = document.getElementById("darkModeToggle");
 if (darkModeToggleBtn) {
-  const isDark = localStorage.getItem("darkMode") === "true";
+  const isDark = sessionStorage.getItem("darkMode") === "true";
   if (isDark) {
     document.body.classList.add("dark-mode");
     darkModeToggleBtn.textContent = "☀️";
@@ -355,7 +355,7 @@ if (darkModeToggleBtn) {
   darkModeToggleBtn.addEventListener("click", () => {
     document.body.classList.toggle("dark-mode");
     const nowDark = document.body.classList.contains("dark-mode");
-    localStorage.setItem("darkMode", nowDark);
+    sessionStorage.setItem("darkMode", nowDark);
     darkModeToggleBtn.textContent = nowDark ? "☀️" : "🌙";
   });
 }

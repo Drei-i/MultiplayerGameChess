@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDC Performance Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: rgba(30, 41, 59, 0.7);
+            --accent: #818cf8;
+            --accent-glow: rgba(129, 140, 248, 0.4);
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(circle at top right, #1e293b, #0f172a);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            padding: 40px;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 50px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-pill {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 8px 20px;
+            border-radius: 100px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 30px;
+            border-radius: 28px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            border-color: var(--accent-glow);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card:hover::before {
+            transform: translateX(100%);
+        }
+
+        .stat-label {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+        }
+
+        .stat-value {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .stat-sub {
+            font-size: 0.85rem;
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 30px;
+        }
+
+        .chart-card {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 30px;
+            border-radius: 32px;
+            height: 450px;
+        }
+
+        .chart-header {
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>PDC System Metrics</h1>
+            <p style="color: var(--text-dim); margin-top: 5px;">Parallel Computing Worker Performance Analysis</p>
+        </div>
+        <div class="status-pill">
+            <div class="status-dot"></div>
+            COORDINATOR ACTIVE
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Active Computing Workers</div>
+            <div class="stat-value" id="workerCount">--</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Rooms</div>
+            <div class="stat-value" id="roomCount">--</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Task Throughput</div>
+            <div class="stat-value" id="totalMoves">--</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Avg. IPC Latency</div>
+            <div class="stat-value" id="avgLatency">-- <span style="font-size: 1rem">ms</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">System Uptime</div>
+            <div class="stat-value" id="uptime">--</div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Throughput (Moves Processed)</div>
+            </div>
+            <canvas id="throughputChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Worker Response Time (ms)</div>
+            </div>
+            <canvas id="latencyChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const setupChart = (ctx, label, color) => {
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#64748b' }
+                        },
+                        x: { 
+                            grid: { display: false },
+                            ticks: { color: '#64748b', maxTicksLimit: 10 }
+                        }
+                    }
+                }
+            });
+        };
+
+        const tChart = setupChart(document.getElementById('throughputChart'), 'Moves', '#6366f1');
+        const lChart = setupChart(document.getElementById('latencyChart'), 'ms', '#f472b6');
+
+        let lastMoveCount = 0;
+
+        async function updateData() {
+            try {
+                const res = await fetch('/metrics');
+                const data = await res.json();
+
+                document.getElementById('workerCount').innerText = data.workerCount;
+                document.getElementById('roomCount').innerText = data.roomCount;
+                document.getElementById('totalMoves').innerText = data.totalMoves;
+                document.getElementById('avgLatency').innerText = data.averageLatencyMs;
+                document.getElementById('uptime').innerText = Math.floor(data.uptime) + 's';
+
+                const now = new Date().toLocaleTimeString();
+                const latency = parseFloat(data.averageLatencyMs);
+                
+                // Throughput Chart (Moves in this interval)
+                const intervalMoves = data.totalMoves - lastMoveCount;
+                lastMoveCount = data.totalMoves;
+
+                if (tChart.data.labels.length > 30) {
+                    tChart.data.labels.shift();
+                    tChart.data.datasets[0].data.shift();
+                }
+                tChart.data.labels.push(now);
+                tChart.data.datasets[0].data.push(intervalMoves);
+                tChart.update('none');
+
+                // Latency Chart
+                if (lChart.data.labels.length > 30) {
+                    lChart.data.labels.shift();
+                    lChart.data.datasets[0].data.shift();
+                }
+                lChart.data.labels.push(now);
+                lChart.data.datasets[0].data.push(latency);
+                lChart.update('none');
+
+            } catch (err) {
+                console.error("Failed to fetch metrics", err);
+            }
+        }
+
+        setInterval(updateData, 1000);
+        updateData();
+    </script>
+</body>
+</html>
