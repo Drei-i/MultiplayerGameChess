@@ -37,7 +37,7 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
         const isKing = window.ChessRules.getPieceType(piece) === "k";
         const kingClass = (mode === "powered-king" && isKing) ? " piece-king" : "";
         pieceEl.className = `piece ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}${kingClass}`;
-        pieceEl.textContent = symbols[piece] || "";
+        pieceEl.textContent = window.symbols[piece] || "";
         sq.appendChild(pieceEl);
       }
 
@@ -247,7 +247,7 @@ function render() {
 function renderCaptured() {
   if (!whiteCapturedEl || !blackCapturedEl) return;
 
-  const inGame = Boolean(room && myColor);
+  const inGame = Boolean(window.room && window.myColor);
 
   // Show captured columns only during active match
   const captureColumns = document.querySelectorAll('.capture-column');
@@ -263,34 +263,33 @@ function renderCaptured() {
 
   if (!inGame) return;
 
-  capturedWhite.forEach(piece => {
+  const capWhite = window.capturedWhite || [];
+  const capBlack = window.capturedBlack || [];
+
+  capWhite.forEach(piece => {
     const token = document.createElement("div");
     token.className = `capture-token ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
-    token.textContent = symbols[piece] || "";
+    token.textContent = window.symbols[piece] || "";
     whiteCapturedEl.appendChild(token);
   });
 
-  capturedBlack.forEach(piece => {
+  capBlack.forEach(piece => {
     const token = document.createElement("div");
     token.className = `capture-token ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}`;
-    token.textContent = symbols[piece] || "";
+    token.textContent = window.symbols[piece] || "";
     blackCapturedEl.appendChild(token);
   });
 
   const piecePoints = {
-    p: 1,
-    n: 3,
-    b: 3,
-    r: 5,
-    q: 9
+    p: 1, n: 3, b: 3, r: 5, q: 9
   };
   const sumCapturedPoints = (pieces) => pieces.reduce((sum, p) => {
     const key = String(p || "").toLowerCase();
     return sum + (piecePoints[key] || 0);
   }, 0);
 
-  const whitePoints = sumCapturedPoints(capturedWhite);
-  const blackPoints = sumCapturedPoints(capturedBlack);
+  const whitePoints = sumCapturedPoints(capWhite);
+  const blackPoints = sumCapturedPoints(capBlack);
   if (whiteCapturedScoreEl) whiteCapturedScoreEl.textContent = `Points: ${whitePoints}`;
   if (blackCapturedScoreEl) blackCapturedScoreEl.textContent = `Points: ${blackPoints}`;
 }

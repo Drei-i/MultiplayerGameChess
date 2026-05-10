@@ -207,6 +207,11 @@ if (cluster.isMaster || cluster.isPrimary) {
     const captured = game.board[tr][tc];
     game.board[tr][tc] = piece;
     game.board[sr][sc] = "";
+
+    if (captured) {
+      if (color === "white") game.capturedWhite.push(captured);
+      else game.capturedBlack.push(captured);
+    }
     
     if (chessRules.getPieceType(piece) === "p" && ((color === "white" && tr === 0) || (color === "black" && tr === 7))) {
       const p = String(data.promotion || "Q").toUpperCase();
