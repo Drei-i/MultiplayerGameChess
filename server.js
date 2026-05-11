@@ -138,6 +138,15 @@ if (cluster.isMaster || cluster.isPrimary) {
       if (game.turn !== playerColor || game.pendingMove) {
         return socket.emit("moveRejected", { reason: game.pendingMove ? "Move already pending" : "Not your turn" });
       }
+
+      // Check if the moving piece is frozen (Powered King mode)
+      if (game.poweredKing) {
+        const frozenForMe = game.poweredKing.frozen[playerColor] || {};
+        const frozenKey = `${data.from[0]},${data.from[1]}`;
+        if (frozenForMe[frozenKey] > 0) {
+          return socket.emit("moveRejected", { reason: "That piece is frozen and cannot move this turn!" });
+        }
+      }
       
       // Lock the game
       game.pendingMove = true;
@@ -219,6 +228,101 @@ if (cluster.isMaster || cluster.isPrimary) {
         io.to(data.room).emit("drawRejected");
       }
       emitUpdate(data.room);
+    });
+
+    socket.on("kingPower", (data) => {
+      const game = rooms[data.room];
+      if (!game || game.manualStatus) return socket.emit("powerRejected", { reason: "Game not active" });
+      if (game.mode !== "powered-king" || !game.poweredKing) return socket.emit("powerRejected", { reason: "Not powered-king mode" });
+
+      const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
+      const opponentColor = playerColor === "white" ? "black" : "white";
+      if (game.turn !== playerColor) return socket.emit("powerRejected", { reason: "Not your turn" });
+
+      const [tr, tc] = data.target;
+      const type = data.type;
+
+      if (type === "freeze") {
+        const targetPiece = game.board[tr][tc];
+        if (!targetPiece || chessRules.isFriendlyPiece(targetPiece, playerColor === "white")) {
+          return socket.emit("powerRejected", { reason: "Freeze must target an enemy piece" });
+        }
+        // Mark piece frozen for the opponent's next turn
+        if (!game.poweredKing.frozen[opponentColor]) game.poweredKing.frozen[opponentColor] = {};
+        game.poweredKing.frozen[opponentColor][`${tr},${tc}`] = 1;
+
+        game.history.moves.push({ kind: "power", power: "freeze", target: [tr, tc], from: [tr, tc], to: [tr, tc] });
+        game.history.boards.push(chessRules.clone(game.board));
+        game.turn = opponentColor;
+        game.lastActivity = Date.now();
+        socket.emit("powerConfirmed", { type, target: [tr, tc] });
+        emitUpdate(data.room);
+
+      } else if (type === "teleport") {
+        const targetPiece = game.board[tr][tc];
+        if (targetPiece) return socket.emit("powerRejected", { reason: "Teleport target must be an empty square" });
+        if (chessRules.isSquareAttacked(game.board, tr, tc, playerColor !== "white")) {
+          return socket.emit("powerRejected", { reason: "Target square is protected by the enemy" });
+        }
+        // Find the king
+        const kingChar = playerColor === "white" ? "K" : "k";
+        let kingPos = null;
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
+        if (!kingPos) return socket.emit("powerRejected", { reason: "King not found" });
+
+        game.board[tr][tc] = kingChar;
+        game.board[kingPos[0]][kingPos[1]] = "";
+        // Teleporting forfeits castling rights
+        if (game.castling && game.castling[playerColor]) {
+          game.castling[playerColor].kingside = false;
+          game.castling[playerColor].queenside = false;
+        }
+
+        game.history.boards.push(chessRules.clone(game.board));
+        game.history.moves.push({ kind: "power", power: "teleport", target: [tr, tc], from: kingPos, to: [tr, tc] });
+        game.turn = opponentColor;
+        game.lastActivity = Date.now();
+        socket.emit("powerConfirmed", { type, target: [tr, tc] });
+        emitUpdate(data.room);
+
+      } else if (type === "swap") {
+        const swapsLeft = game.poweredKing.swapsLeft[playerColor];
+        if (swapsLeft <= 0) return socket.emit("powerRejected", { reason: "No swaps left" });
+
+        const targetPiece = game.board[tr][tc];
+        const isWhite = playerColor === "white";
+        if (!targetPiece || !chessRules.isFriendlyPiece(targetPiece, isWhite)) {
+          return socket.emit("powerRejected", { reason: "Swap must target a friendly piece" });
+        }
+        if (chessRules.getPieceType(targetPiece) === "k") {
+          return socket.emit("powerRejected", { reason: "Cannot swap with the King itself" });
+        }
+        // Find the king
+        const kingChar = playerColor === "white" ? "K" : "k";
+        let kingPos = null;
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
+        if (!kingPos) return socket.emit("powerRejected", { reason: "King not found" });
+
+        // Perform the swap
+        game.board[kingPos[0]][kingPos[1]] = targetPiece;
+        game.board[tr][tc] = kingChar;
+        game.poweredKing.swapsLeft[playerColor]--;
+        // Swapping forfeits castling rights
+        if (game.castling && game.castling[playerColor]) {
+          game.castling[playerColor].kingside = false;
+          game.castling[playerColor].queenside = false;
+        }
+
+        game.history.boards.push(chessRules.clone(game.board));
+        game.history.moves.push({ kind: "power", power: "swap", target: [tr, tc], from: kingPos, to: [tr, tc] });
+        game.turn = opponentColor;
+        game.lastActivity = Date.now();
+        socket.emit("powerConfirmed", { type, target: [tr, tc] });
+        emitUpdate(data.room);
+
+      } else {
+        socket.emit("powerRejected", { reason: "Unknown power type" });
+      }
     });
 
     socket.on("disconnect", () => {
@@ -308,6 +412,19 @@ if (cluster.isMaster || cluster.isPrimary) {
     game.halfMoveClock = (pieceType === "p" || captured) ? 0 : game.halfMoveClock + 1;
     game.drawOfferFrom = null;
     game.pendingMove = false;
+
+    // Decrement freeze timers: the color that just moved has no freeze applied to them next turn
+    // We decrement the frozen counters for the color that is now about to move (the opponent)
+    if (game.poweredKing) {
+      const nowMoving = game.turn; // already flipped above
+      const frozen = game.poweredKing.frozen[nowMoving];
+      if (frozen) {
+        for (const key of Object.keys(frozen)) {
+          frozen[key]--;
+          if (frozen[key] <= 0) delete frozen[key];
+        }
+      }
+    }
   }
 
   function emitUpdate(room) {

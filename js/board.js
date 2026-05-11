@@ -39,6 +39,20 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
         pieceEl.className = `piece ${window.ChessRules.isWhitePiece(piece) ? "piece-white" : "piece-black"}${kingClass}`;
         pieceEl.textContent = window.symbols[piece] || "";
         sq.appendChild(pieceEl);
+
+        // Freeze visualization (Powered King mode)
+        const frozenData = window.gameData?.poweredKing?.frozen;
+        const isFrozen = frozenData && (
+          (frozenData.white?.[`${r},${c}`] > 0) ||
+          (frozenData.black?.[`${r},${c}`] > 0)
+        );
+        if (isFrozen) {
+          pieceEl.classList.add("piece-frozen");
+          const snowflake = document.createElement("div");
+          snowflake.className = "freeze-overlay";
+          snowflake.textContent = "❄";
+          sq.appendChild(snowflake);
+        }
       }
 
       if (interactive) {

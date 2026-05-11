@@ -525,4 +525,74 @@ body.dark-mode .log-entry.error {
     filter: drop-shadow(0 0 15px rgba(255, 0, 0, 1)) drop-shadow(0 0 30px rgba(255, 0, 0, 0.6));
     transform: scale(1.05);
   }
-}
+}
+
+/* =============================================
+   FREEZE VISUALIZATION — Powered King Chess
+   ============================================= */
+
+/* Icy glow on the frozen piece itself */
+.piece-frozen {
+  filter:
+    drop-shadow(0 0 6px rgba(100, 210, 255, 1))
+    drop-shadow(0 0 14px rgba(0, 160, 255, 0.7))
+    saturate(0.35)
+    brightness(0.85) !important;
+  animation: frozenPulse 1.8s infinite ease-in-out !important;
+}
+
+@keyframes frozenPulse {
+  0%, 100% {
+    filter:
+      drop-shadow(0 0 6px rgba(100, 210, 255, 1))
+      drop-shadow(0 0 14px rgba(0, 160, 255, 0.7))
+      saturate(0.35)
+      brightness(0.85);
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 12px rgba(180, 240, 255, 1))
+      drop-shadow(0 0 26px rgba(60, 190, 255, 0.9))
+      saturate(0.2)
+      brightness(0.75);
+  }
+}
+
+/* Spinning ❄ snowflake badge in the corner of the frozen square */
+.freeze-overlay {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 0.9rem;
+  line-height: 1;
+  z-index: 30;
+  pointer-events: none;
+  color: #a8e8ff;
+  text-shadow:
+    0 0 6px rgba(100, 210, 255, 1),
+    0 0 14px rgba(0, 180, 255, 0.8);
+  transform-origin: center;
+  animation: snowSpin 3s linear infinite, snowPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes snowSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes snowPulse {
+  0%, 100% { opacity: 1;   scale: 1; }
+  50%       { opacity: 0.7; scale: 1.3; }
+}
+
+/* Ice-tinted square background when a piece is frozen */
+.square:has(.freeze-overlay) {
+  background-image: linear-gradient(
+    135deg,
+    rgba(140, 220, 255, 0.28) 0%,
+    rgba(80, 180, 255, 0.12) 50%,
+    rgba(180, 240, 255, 0.22) 100%
+  ) !important;
+  box-shadow: inset 0 0 0 2px rgba(100, 210, 255, 0.6) !important;
+}
+
