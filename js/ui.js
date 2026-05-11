@@ -122,12 +122,53 @@ function isGameOverStatus(status) {
 
 function moveLabel(m, idx) {
   if (!m) return `${idx + 1}. (unknown)`;
+  
+  const moveNumber = Math.floor(idx / 2) + 1;
+  const isWhite = idx % 2 === 0;
+  const prefix = isWhite ? `${moveNumber}. ` : `${moveNumber}... `;
+
   if (m.kind === "power") {
-    return `${idx + 1}. ${String(m.by || "").toUpperCase()} POWER: ${String(m.power || "").toUpperCase()} → [${(m.target || []).join(",")}]`;
+    return `${prefix}POWER: ${String(m.power || "").toUpperCase()} → [${(m.target || []).join(",")}]`;
   }
-  const cap = m.captured ? ` x${m.captured}` : "";
-  const promo = m.promotedTo ? `=${m.promotedTo}` : "";
-  return `${idx + 1}. ${String(m.by || "").toUpperCase()} ${m.piece} [${(m.from || []).join(",")}]→[${(m.to || []).join(",")}]${cap}${promo}`;
+
+  // Helper to convert [row, col] to "e4"
+  const toAlgebraic = (pos) => {
+    if (!pos || pos.length !== 2) return "??";
+    return String.fromCharCode(97 + pos[1]) + (8 - pos[0]);
+  };
+
+  const piece = m.piece || "";
+  const pieceType = piece.toLowerCase();
+  const from = toAlgebraic(m.from);
+  const to = toAlgebraic(m.to);
+  const isCapture = Boolean(m.captured);
+  
+  let notation = "";
+
+  // 1. Castling detection
+  if (pieceType === "k" && Math.abs(m.from[1] - m.to[1]) === 2) {
+    notation = m.to[1] > m.from[1] ? "O-O" : "O-O-O";
+  } 
+  // 2. Pawn moves/captures
+  else if (pieceType === "p") {
+    if (isCapture) {
+      notation = from[0] + "x" + to;
+    } else {
+      notation = to;
+    }
+  } 
+  // 3. Piece moves/captures
+  else {
+    const pieceLetter = pieceType === "n" ? "N" : pieceType.toUpperCase();
+    notation = pieceLetter + (isCapture ? "x" : "") + to;
+  }
+
+  // 4. Promotions
+  if (m.promotedTo) {
+    notation += "=" + String(m.promotedTo).toUpperCase();
+  }
+
+  return `${prefix}${notation}`;
 }
 
 function openReview() {

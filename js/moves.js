@@ -19,8 +19,8 @@ window.getValidMovesPreview = function(r, c) {
     const isWhite = rules.isWhitePiece(piece);
     
     try {
-        const moves = rules.getValidMoves(board, r, c, isWhite, gameData || {});
-        return Array.isArray(moves) ? moves : [];
+        const potentialMoves = rules.getValidMoves(board, r, c, isWhite, gameData || {});
+        return potentialMoves.filter(m => rules.isMoveLegal(board, [r, c], m, isWhite, gameData || {}));
     } catch (err) {
         console.error("Move preview error:", err);
         return [];

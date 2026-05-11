@@ -219,6 +219,35 @@ if (cluster.isMaster || cluster.isPrimary) {
     const [sr, sc] = data.from, [tr, tc] = data.to;
     const piece = game.board[sr][sc];
     const captured = game.board[tr][tc];
+    const pieceType = chessRules.getPieceType(piece);
+    
+    // 1. Handle Castling (Move the Rook)
+    const targetCol = parseInt(tc);
+    const targetRow = parseInt(tr);
+    const startCol = parseInt(sc);
+    
+    if (pieceType === "k" && Math.abs(startCol - targetCol) === 2) {
+      if (targetCol === 6) { // Kingside
+        game.board[targetRow][5] = game.board[targetRow][7];
+        game.board[targetRow][7] = "";
+      } else if (targetCol === 2) { // Queenside
+        game.board[targetRow][3] = game.board[targetRow][0];
+        game.board[targetRow][0] = "";
+      }
+    }
+
+    // 2. Handle En Passant Capture
+    if (pieceType === "p" && !captured && sc !== tc) {
+      const epRow = color === "white" ? tr + 1 : tr - 1;
+      const epPiece = game.board[epRow][tc];
+      if (epPiece) {
+        if (color === "white") game.capturedWhite.push(epPiece);
+        else game.capturedBlack.push(epPiece);
+        game.board[epRow][tc] = "";
+      }
+    }
+
+    // Standard move execution
     game.board[tr][tc] = piece;
     game.board[sr][sc] = "";
 
@@ -227,17 +256,33 @@ if (cluster.isMaster || cluster.isPrimary) {
       else game.capturedBlack.push(captured);
     }
     
-    if (chessRules.getPieceType(piece) === "p" && ((color === "white" && tr === 0) || (color === "black" && tr === 7))) {
+    // 3. Update Castling Rights
+    if (game.castling && game.castling[color]) {
+      const rights = game.castling[color];
+      if (pieceType === "k") {
+        rights.kingside = false;
+        rights.queenside = false;
+      } else if (pieceType === "r") {
+        if (sc === 7) rights.kingside = false;
+        if (sc === 0) rights.queenside = false;
+      }
+    }
+
+    // 4. Update En Passant Target
+    game.enPassantTarget = (pieceType === "p" && Math.abs(sr - tr) === 2) ? [(sr + tr) / 2, sc] : null;
+
+    if (pieceType === "p" && ((color === "white" && tr === 0) || (color === "black" && tr === 7))) {
       const p = String(data.promotion || "Q").toUpperCase();
       game.board[tr][tc] = color === "white" ? p : p.toLowerCase();
     }
 
     game.history.boards.push(chessRules.clone(game.board));
-    game.history.moves.push({ from: [sr, sc], to: [tr, tc], captured });
+    game.history.moves.push({ from: [sr, sc], to: [tr, tc], captured, piece });
     game.turn = color === "white" ? "black" : "white";
     game.lastActivity = Date.now();
-    game.halfMoveClock = (chessRules.getPieceType(piece) === "p" || captured) ? 0 : game.halfMoveClock + 1;
+    game.halfMoveClock = (pieceType === "p" || captured) ? 0 : game.halfMoveClock + 1;
     game.drawOfferFrom = null;
+    game.pendingMove = false;
   }
 
   function emitUpdate(room) {

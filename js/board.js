@@ -50,7 +50,7 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
         // Highlight valid moves
         if (validMoves.some(([vr, vc]) => vr === r && vc === c)) {
           sq.classList.add("valid-move");
-          
+
           // Add a physical dot element for guaranteed visibility
           const dot = document.createElement("div");
           dot.className = "move-dot";
@@ -61,6 +61,23 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
             sq.classList.add("valid-capture");
           }
         }
+      }
+
+      // COORDINATE LABELS
+      const isBottomEdge = displayR === 7;
+      const isLeftEdge = displayC === 0;
+
+      if (isBottomEdge) {
+        const fileLabel = document.createElement("span");
+        fileLabel.className = "coord-label file-label";
+        fileLabel.textContent = String.fromCharCode(97 + c); // a-h
+        sq.appendChild(fileLabel);
+      }
+      if (isLeftEdge) {
+        const rankLabel = document.createElement("span");
+        rankLabel.className = "coord-label rank-label";
+        rankLabel.textContent = 8 - r; // 1-8
+        sq.appendChild(rankLabel);
       }
 
       // Drag start

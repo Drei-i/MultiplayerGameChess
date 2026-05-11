@@ -70,6 +70,7 @@ const isSquareAttacked = (board, r, c, byWhite) => {
     for (let sc = 0; sc < 8; sc++) {
       const p = board[sr][sc];
       if (p && isFriendlyPiece(p, byWhite)) {
+        if (sr === r && sc === c) continue; // A piece doesn't attack its own square
         const type = getPieceType(p);
         if (type === "p") {
           const dir = byWhite ? -1 : 1;

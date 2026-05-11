@@ -228,6 +228,28 @@ button[disabled] {
   opacity: 0.65;
 }
 
+.coord-label {
+  position: absolute;
+  font-size: 0.7rem;
+  font-weight: 700;
+  pointer-events: none;
+  opacity: 0.5;
+  user-select: none;
+}
+
+.file-label {
+  bottom: 2px;
+  right: 4px;
+}
+
+.rank-label {
+  top: 2px;
+  left: 4px;
+}
+
+.white .coord-label { color: #6f8f5d; }
+.black .coord-label { color: #f2ecd7; }
+
 .square.selected {
   background-color: rgba(255, 235, 59, 0.4) !important;
   box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.4);

@@ -210,7 +210,14 @@ socket.on("update", (d) => {
 
 socket.on("moveConfirmed", (d) => {
   moveInFlight = false;
-  log(`✅ Move confirmed: [${d.from}] → [${d.to}]${d.captured ? ` (captured ${d.captured})` : ""}${d.promoted ? " [PAWN PROMOTED]" : ""}`, "success");
+  
+  const toAlg = (pos) => {
+    if (!pos || pos.length !== 2) return "??";
+    return String.fromCharCode(97 + pos[1]) + (8 - pos[0]);
+  };
+
+  const moveStr = `${toAlg(d.from)} → ${toAlg(d.to)}`;
+  log(`✅ Move confirmed: ${moveStr}${d.captured ? ` (captured ${d.captured})` : ""}${d.promoted ? " [PAWN PROMOTED]" : ""}`, "success");
 });
 
 socket.on("moveRejected", (d) => {
