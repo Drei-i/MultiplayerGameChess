@@ -509,3 +509,20 @@ body.dark-mode .log-entry.error {
     transform: scale(0.1);
   }
 }
+
+/* King Aura Effect for Powered King Chess */
+.piece-king {
+  filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.8)) drop-shadow(0 0 20px rgba(255, 0, 0, 0.4));
+  animation: kingAura 2s infinite ease-in-out;
+}
+
+@keyframes kingAura {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.8)) drop-shadow(0 0 20px rgba(255, 0, 0, 0.4));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 15px rgba(255, 0, 0, 1)) drop-shadow(0 0 30px rgba(255, 0, 0, 0.6));
+    transform: scale(1.05);
+  }
+}
