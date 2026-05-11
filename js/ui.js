@@ -232,7 +232,7 @@ function resetToLobbyUi({ clearBoard = false } = {}) {
 
   room = null;
   myColor = null;
-  sessionStorage.removeItem(RECONNECT_STORAGE_KEY);
+  localStorage.removeItem(RECONNECT_STORAGE_KEY);
   turn = "white";
   gameStatus = { status: "active" };
   capturedWhite = [];
@@ -255,7 +255,7 @@ function resetToLobbyUi({ clearBoard = false } = {}) {
   renderCaptured();
 }
 
-function showModal({ title, message, primaryText = "OK", secondaryText = "Cancel", onPrimary, onSecondary }) {
+window.showModal = function({ title, message, primaryText = "OK", secondaryText = "Cancel", onPrimary, onSecondary }) {
   modalTitleEl.textContent = title;
   modalMessageEl.textContent = message;
   modalPrimaryBtnEl.textContent = primaryText;
@@ -265,7 +265,7 @@ function showModal({ title, message, primaryText = "OK", secondaryText = "Cancel
   modalOverlayEl.style.display = "flex";
 }
 
-function hideModal() {
+window.hideModal = function() {
   modalOverlayEl.style.display = "none";
   modalOnPrimary = null;
   modalOnSecondary = null;
@@ -387,7 +387,7 @@ updateTopPanelVisibility();
 // DARK MODE
 const darkModeToggleBtn = document.getElementById("darkModeToggle");
 if (darkModeToggleBtn) {
-  const isDark = sessionStorage.getItem("darkMode") === "true";
+  const isDark = localStorage.getItem("darkMode") === "true";
   if (isDark) {
     document.body.classList.add("dark-mode");
     darkModeToggleBtn.textContent = "☀️";
@@ -396,7 +396,7 @@ if (darkModeToggleBtn) {
   darkModeToggleBtn.addEventListener("click", () => {
     document.body.classList.toggle("dark-mode");
     const nowDark = document.body.classList.contains("dark-mode");
-    sessionStorage.setItem("darkMode", nowDark);
+    localStorage.setItem("darkMode", nowDark);
     darkModeToggleBtn.textContent = nowDark ? "☀️" : "🌙";
   });
 }

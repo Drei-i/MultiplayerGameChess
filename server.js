@@ -101,6 +101,31 @@ if (cluster.isMaster || cluster.isPrimary) {
       }
     });
 
+    socket.on("reconnect", (data) => {
+      const { room, token } = data;
+      const game = rooms[room];
+      if (!game) return;
+
+      let color = null;
+      if (game.players.white.token === token) color = "white";
+      else if (game.players.black.token === token) color = "black";
+
+      if (color) {
+        console.log(`[Reconnect] Player ${color} rejoining room ${room}`);
+        game.players[color].socketId = socket.id;
+        socketToRoom[socket.id] = room;
+        socket.join(room);
+        
+        // Send a fresh "start" event so the client knows their color/mode again
+        socket.emit("start", { color, room, mode: game.mode, token });
+        
+        // Notify the opponent
+        socket.to(room).emit("playerReconnected", { color });
+        
+        emitUpdate(room);
+      }
+    });
+
     socket.on("move", (data) => {
       const start = Date.now();
       const taskId = `${Date.now()}-${Math.random()}`;

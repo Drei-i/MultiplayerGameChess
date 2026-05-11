@@ -93,7 +93,7 @@ socket.on("start", (d) => {
   room = d.room;
   mode = d.mode || mode;
   if (d.token) {
-    sessionStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify({
       room: d.room,
       token: d.token
     }));
@@ -148,7 +148,13 @@ socket.on("update", (d) => {
   } else if (gameStatus.status === "draw") {
     statusText = "DRAW — game ended in a draw";
   }
-  
+
+  // Clear reconnect token if game is finished
+  const finishedStatuses = ["checkmate", "stalemate", "resigned", "draw"];
+  if (finishedStatuses.includes(gameStatus.status)) {
+    localStorage.removeItem(RECONNECT_STORAGE_KEY);
+  }
+
   if (turn === myColor && gameStatus.status === "active") {
     statusText += " (YOUR TURN)";
   } else if (turn === myColor && gameStatus.status === "check") {
@@ -371,16 +377,39 @@ function displayToBoardCoords(displayR, displayC, flipped) {
 
 
 // =========================
+socket.on("playerReconnected", (d) => {
+  // 1. Remove all old disconnection warnings
+  const logs = document.getElementById("logs");
+  if (logs) {
+    const items = logs.getElementsByClassName("log-item");
+    for (let i = items.length - 1; i >= 0; i--) {
+      const text = items[i].textContent.toLowerCase();
+      if (text.includes("disconnected") || text.includes("left the game") || text.includes("reconnecting")) {
+        items[i].remove();
+      }
+    }
+  }
+  // 2. Hide the modal popup
+  if (typeof hideModal === "function") hideModal();
+  
+  // 3. Add a very prominent reconnected message
+  log(`⚡ OPPONENT RECONNECTED! Game on!`, "info");
+});
+
+socket.on("roomFull", () => {
+  log("This room is full!", "error");
+});
+
 socket.on("connect", () => {
   moveInFlight = false;
   try {
-    const raw = sessionStorage.getItem(RECONNECT_STORAGE_KEY);
+    const raw = localStorage.getItem(RECONNECT_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (!parsed?.room || !parsed?.token) return;
     socket.emit("reconnect", { room: parsed.room, token: parsed.token });
     log("Attempting to reconnect to your previous match...", "info");
   } catch (err) {
-    sessionStorage.removeItem(RECONNECT_STORAGE_KEY);
+    localStorage.removeItem(RECONNECT_STORAGE_KEY);
   }
 });
