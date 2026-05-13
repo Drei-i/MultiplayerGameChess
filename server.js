@@ -624,7 +624,7 @@ if (cluster.isMaster || cluster.isPrimary) {
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => console.log(`[Master] Server online at http://localhost:${PORT}`));
 
-  // --- PERIODIC CLEANUP (Every 10 mins) ---
+  // --- PERIODIC CLEANUP (Demo Mode: Every 30s) ---
   setInterval(() => {
     const now = Date.now();
     for (const roomId in rooms) {
@@ -633,13 +633,13 @@ if (cluster.isMaster || cluster.isPrimary) {
       const status = game.manualStatus || chessRules.getGameStatus(game.board, game.turn, game);
       const isGameOver = ["checkmate", "stalemate", "resigned", "draw"].includes(status.status);
 
-      // Clean up finished games after 30 mins, inactive games after 2 hours
-      if ((isGameOver && inactiveTime > 30 * 60 * 1000) || inactiveTime > 2 * 60 * 60 * 1000) {
-        console.log(`[Cleanup] Removing room ${roomId} (Inactive: ${Math.floor(inactiveTime / 60000)}m, Status: ${status.status})`);
+      // Demo Mode: Clean up finished games after 1 min, inactive games after 2 mins
+      if ((isGameOver && inactiveTime > 1 * 60 * 1000) || inactiveTime > 2 * 60 * 1000) {
+        console.log(`[Cleanup] Removing room ${roomId} (Inactive: ${Math.floor(inactiveTime / 1000)}s, Status: ${status.status})`);
         delete rooms[roomId];
       }
     }
-  }, 10 * 60 * 1000);
+  }, 30 * 1000);
 
 } else {
   // Worker process

@@ -369,6 +369,7 @@ body.dark-mode .piece-black {
   width: min(680px, 100%);
   max-width: 680px;
   min-height: 180px;
+  max-height: 280px; /* FIX: Added max-height to prevent infinite growth */
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(82, 92, 74, 0.15);
   padding: 14px;
