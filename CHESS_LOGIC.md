@@ -50,14 +50,38 @@ if (isInCheck(board, playerColor)) {
 - Current player has NO legal moves
 - Result: Draw 🤝
 
-### 7. **Pawn Promotion**
-- Automatically promotes to Queen when reaching opposite end
-- (Can be extended to allow selection of Queen/Rook/Bishop/Knight)
+### 9. **Powered King Mode**
+- Kings have three unique abilities (consumes 1 turn):
+    - ❄️ **Freeze**: Freeze an enemy piece for 1 turn (it cannot move or capture).
+    - 🌌 **Teleport**: Move the king to any empty, safe square (forfeits castling).
+    - 🔄 **Swap**: Swap positions with any friendly piece (forfeits castling).
+- **Constraints**: 
+    - Cannot use powers while the King is frozen.
+    - Cannot swap or teleport into check.
+    - Powers increment the 50-move clock.
 
-### 8. **Path Clearing**
-- `isPathClear()` - Ensures sliding pieces (Rook/Bishop/Queen) can't jump
-- Checks all squares between source and target
-- Allows capture of piece at target square
+### 10. **Fog of War Mode**
+- **Visibility**: Players only see squares that are:
+    1. Occupied by their own pieces.
+    2. Reachable by a legal move of one of their pieces.
+    3. Adjacent to one of their pieces.
+- **Hidden Information**: Match history is hidden until the game ends to prevent analysis of invisible moves.
+
+---
+
+## 🛠 Parallel Validation Workflow (PDC)
+
+The system delegates move legality checks to worker processes to maintain a high-performance coordinator.
+
+1. **Client Action**: Player moves a piece on the UI.
+2. **Master Request**: Master process generates a unique `taskId` and sends the board state to a Worker via IPC.
+3. **Worker Computation**:
+    - Worker imports `chess-rules.js`.
+    - Runs `isMoveLegal()` (includes simulating the move and checking for king safety).
+    - Returns boolean `isValid` via IPC.
+4. **Master Resolution**: Master applies the move to the global state and broadcasts the update to all players.
+
+---
 
 ## Key Functions
 
@@ -77,28 +101,31 @@ if (isInCheck(board, playerColor)) {
 ✅ **Fixed blocking** - Pieces can block checks by moving to intermediate squares  
 ✅ **Fixed capturing** - Pieces can capture the attacking piece to escape check  
 ✅ **Added comprehensive logging** - Server logs all game state changes  
+✅ **Resolved IPC Sync** - Fixed race conditions in Master-Worker move validation  
+
+---
 
 ## Testing Scenarios
 
 ### Test 1: King in Check with Escape
-- Black rook checks white king
-- White should be able to move king to safe square
-- **Result**: CHECK status (not CHECKMATE)
+- Black rook checks white king.
+- White should be able to move king to safe square.
+- **Result**: CHECK status (not CHECKMATE).
 
 ### Test 2: King in Check with Block
-- Black rook on e8 checking white king on e1
-- White has bishop that can move to block (e.g., e4)
-- **Result**: CHECK status (block is legal move)
+- Black rook on e8 checking white king on e1.
+- White has bishop that can move to block (e.g., e4).
+- **Result**: CHECK status (block is legal move).
 
 ### Test 3: King in Check with Capture
-- Black knight on e4 checking white king on e2
-- White has queen that can capture the knight
-- **Result**: CHECK status (capture is legal move)
+- Black knight on e4 checking white king on e2.
+- White has queen that can capture the knight.
+- **Result**: CHECK status (capture is legal move).
 
 ### Test 4: True Checkmate
-- Black has rook on e8 checking white king on e1
-- White has no escape squares (attacked or blocked)
-- White cannot block (rook is adjacent)
-- White cannot capture rook
-- **Result**: CHECKMATE - Black wins
+- Black has rook on e8 checking white king on e1.
+- White has no escape squares (attacked or blocked).
+- White cannot block (rook is adjacent).
+- White cannot capture rook.
+- **Result**: CHECKMATE - Black wins.
 

@@ -139,6 +139,13 @@ if (cluster.isMaster || cluster.isPrimary) {
       const taskId = `${Date.now()}-${Math.random()}`;
       const game = rooms[data.room];
       if (!game || game.manualStatus) return;
+
+      // FIX: Proactive Game-Over Check
+      const currentStatus = chessRules.getGameStatus(game.board, game.turn, game);
+      const isGameOver = ["checkmate", "stalemate", "resigned", "draw"].includes(currentStatus.status);
+      if (isGameOver) {
+        return socket.emit("moveRejected", { reason: "Game is already over" });
+      }
       
       const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
       
@@ -183,9 +190,21 @@ if (cluster.isMaster || cluster.isPrimary) {
         }
       }, 5000);
 
-      const pieceType = chessRules.getPieceType(game.board[data.from[0]][data.from[1]]);
+      const piece = game.board[data.from[0]][data.from[1]];
+      const pieceType = chessRules.getPieceType(piece);
       const captured = game.board[data.to[0]][data.to[1]];
-      const isPromo = pieceType === "p" && ((playerColor === "white" && data.to[0] === 0) || (playerColor === "black" && data.to[0] === 7));
+      
+      // FIX: Strict Promotion Validation (Before Worker)
+      const isPromoMove = pieceType === "p" && ((playerColor === "white" && data.to[0] === 0) || (playerColor === "black" && data.to[0] === 7));
+      if (data.promotion && !isPromoMove) {
+        return socket.emit("moveRejected", { reason: "Promotion choice provided for non-promotion move" });
+      }
+      if (!data.promotion && isPromoMove) {
+        // We could either default to Queen or reject. Standard behavior: default to Queen.
+        data.promotion = "Q"; 
+      }
+
+      const isPromo = isPromoMove;
 
       const worker = Object.values(cluster.workers)[Math.floor(Math.random() * Object.keys(cluster.workers).length)];
       
@@ -279,6 +298,11 @@ if (cluster.isMaster || cluster.isPrimary) {
 
       const [tr, tc] = data.target;
       const type = data.type;
+
+      // FIX: Bounds Check
+      if (tr < 0 || tr > 7 || tc < 0 || tc > 7) {
+        return socket.emit("powerRejected", { reason: "Target out of bounds" });
+      }
 
       // Find the king to check if it is frozen
       const kingChar = playerColor === "white" ? "K" : "k";
@@ -502,8 +526,13 @@ if (cluster.isMaster || cluster.isPrimary) {
     // 4. Update En Passant Target
     game.enPassantTarget = (pieceType === "p" && Math.abs(sr - tr) === 2) ? [(sr + tr) / 2, sc] : null;
 
-    if (pieceType === "p" && ((color === "white" && tr === 0) || (color === "black" && tr === 7))) {
-      const p = String(data.promotion || "Q").toUpperCase();
+    // FIX: Strict Promotion Validation
+    const isAtLastRank = (color === "white" && tr === 0) || (color === "black" && tr === 7);
+    if (pieceType === "p" && isAtLastRank) {
+      const allowedPromotions = ["Q", "R", "B", "N"];
+      let p = String(data.promotion || "Q").toUpperCase();
+      if (!allowedPromotions.includes(p)) p = "Q"; // Default to Queen if invalid
+      
       game.board[tr][tc] = color === "white" ? p : p.toLowerCase();
     }
 
