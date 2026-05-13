@@ -155,6 +155,16 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
         
         let promotion = null;
         const movingPiece = board?.[fr]?.[fc] || "";
+        
+        // FIX: Only show promotion if the move is actually legal
+        const legalMoves = getValidMovesPreview(fr, fc);
+        const isLegal = legalMoves.some(([mr, mc]) => mr === r && mc === c);
+        
+        if (!isLegal) {
+          draggedPiece = null;
+          return;
+        }
+
         if (isPromotionMove(fr, r, movingPiece)) {
           promotion = await requestPromotionChoice();
           if (!promotion) {
@@ -201,6 +211,18 @@ function renderBoard(targetEl, boardToRender, { interactive = false } = {}) {
 
           let promotion = null;
           const movingPiece = board?.[sr]?.[sc] || "";
+
+          // FIX: Only show promotion if the move is actually legal
+          const legalMoves = getValidMovesPreview(sr, sc);
+          const isLegal = legalMoves.some(([mr, mc]) => mr === r && mc === c);
+          
+          if (!isLegal) {
+            selected = null;
+            validMoves = [];
+            render();
+            return;
+          }
+
           if (isPromotionMove(sr, r, movingPiece)) {
             promotion = await requestPromotionChoice();
             if (!promotion) {
