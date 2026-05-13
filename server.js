@@ -147,8 +147,9 @@ if (cluster.isMaster || cluster.isPrimary) {
         return socket.emit("moveRejected", { reason: game.pendingMove ? "Move already pending" : "Not your turn" });
       }
 
-      if (game.drawOfferFrom) {
-        return socket.emit("moveRejected", { reason: "A draw offer is pending. Please respond to the offer first." });
+      if (game.drawOfferFrom || game.isPaused) {
+        const reason = game.isPaused ? "Game is paused until opponent confirms re-join" : "A draw offer is pending. Please respond to the offer first.";
+        return socket.emit("moveRejected", { reason });
       }
 
       // Check if the moving piece is frozen (Powered King mode)
@@ -272,7 +273,7 @@ if (cluster.isMaster || cluster.isPrimary) {
       const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
       const opponentColor = playerColor === "white" ? "black" : "white";
       if (game.turn !== playerColor) return socket.emit("powerRejected", { reason: "Not your turn" });
-      if (game.drawOfferFrom) return socket.emit("powerRejected", { reason: "A draw offer is pending" });
+      if (game.drawOfferFrom || game.isPaused) return socket.emit("powerRejected", { reason: game.isPaused ? "Game is paused" : "A draw offer is pending" });
 
       const frozenForMe = game.poweredKing.frozen[playerColor] || {};
 
@@ -412,8 +413,24 @@ if (cluster.isMaster || cluster.isPrimary) {
         // Notify the opponent
         io.to(oppSid).emit("opponentDisconnected", { color: playerColor });
         
+        // Pause the game until they return
+        game.isPaused = true;
+        emitUpdate(room);
+        
         // Clean up mapping
         delete socketToRoom[socket.id];
+      }
+    });
+
+    socket.on("confirmRejoin", (data) => {
+      const game = rooms[data.room];
+      if (!game) return;
+      
+      const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
+      if (playerColor) {
+        game.isPaused = false;
+        console.log(`[Room ${data.room}] Match unpaused by ${playerColor}`);
+        emitUpdate(data.room);
       }
     });
   });

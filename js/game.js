@@ -112,22 +112,18 @@ socket.on("start", (d) => {
   statusEl.textContent = `You are playing as ${myColor.toUpperCase()} (${modeLabel(mode)})`;
   log(`Game started! You are ${myColor}. Mode: ${mode}. Room: ${room}`, "success");
   
-  // Title Flashing (Subtle notification for background tabs)
-  if (document.hidden) {
-    let originalTitle = document.title;
-    let isFlash = false;
-    const flashInterval = setInterval(() => {
-      if (!document.hidden) {
-        clearInterval(flashInterval);
-        document.title = originalTitle;
-      } else {
-        document.title = isFlash ? "!!! MATCH STARTED !!!" : originalTitle;
-        isFlash = !isFlash;
-      }
-    }, 1000);
-  }
+  // Title Alert (Updates tab preview)
+  document.title = "!!! MATCH STARTED !!!";
+  const resetTitle = () => {
+    document.title = "Chess";
+    window.removeEventListener("mousedown", resetTitle);
+    window.removeEventListener("keydown", resetTitle);
+    window.removeEventListener("focus", resetTitle);
+  };
+  window.addEventListener("mousedown", resetTitle);
+  window.addEventListener("keydown", resetTitle);
+  window.addEventListener("focus", resetTitle);
   
-  playSound("start");
   updatePowerPanel();
   updateGameActions();
 });
@@ -235,7 +231,8 @@ socket.on("update", (d) => {
       primaryText: "Rejoin",
       secondaryText: "Abandon",
       onPrimary: () => {
-        log("Match rejoined.", "success");
+        socket.emit("confirmRejoin", { room });
+        log("Match rejoined. Moves are now enabled.", "success");
       },
       onSecondary: () => {
         socket.emit("resign", { room });
