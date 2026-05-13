@@ -95,8 +95,8 @@ if (cluster.isMaster || cluster.isPrimary) {
         socketToRoom[p1Id] = room;
         socketToRoom[p2Id] = room;
 
-        io.to(p1Id).emit("start", { color: "white", room, mode, token: token1 });
         io.to(p2Id).emit("start", { color: "black", room, mode, token: token2 });
+        recordPosition(rooms[room]); // Record starting position
         emitUpdate(room);
       }
     });
@@ -152,6 +152,16 @@ if (cluster.isMaster || cluster.isPrimary) {
         const frozenKey = `${data.from[0]},${data.from[1]}`;
         if (frozenForMe[frozenKey] > 0) {
           return socket.emit("moveRejected", { reason: "That piece is frozen and cannot move this turn!" });
+        }
+        
+        // Special check for castling: the Rook must also not be frozen
+        const piece = game.board[data.from[0]][data.from[1]];
+        if (chessRules.getPieceType(piece) === "k" && Math.abs(data.from[1] - data.to[1]) === 2) {
+          const r = data.from[0];
+          const rookCol = data.to[1] === 6 ? 7 : 0;
+          if (frozenForMe[`${r},${rookCol}`] > 0) {
+            return socket.emit("moveRejected", { reason: "Cannot castle while the Rook is frozen!" });
+          }
         }
       }
       
@@ -246,8 +256,19 @@ if (cluster.isMaster || cluster.isPrimary) {
       const opponentColor = playerColor === "white" ? "black" : "white";
       if (game.turn !== playerColor) return socket.emit("powerRejected", { reason: "Not your turn" });
 
+      const frozenForMe = game.poweredKing.frozen[playerColor] || {};
+
       const [tr, tc] = data.target;
       const type = data.type;
+
+      // Find the king to check if it is frozen
+      const kingChar = playerColor === "white" ? "K" : "k";
+      let kingPos = null;
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
+      
+      if (kingPos && frozenForMe[`${kingPos[0]},${kingPos[1]}`] > 0) {
+        return socket.emit("powerRejected", { reason: "The King is frozen and cannot use powers!" });
+      }
 
       if (type === "freeze") {
         const targetPiece = game.board[tr][tc];
@@ -262,16 +283,16 @@ if (cluster.isMaster || cluster.isPrimary) {
         game.history.boards.push(chessRules.clone(game.board));
         game.turn = opponentColor;
         game.lastActivity = Date.now();
+        game.halfMoveClock++; // Power moves increment the 50-move clock
+        game.enPassantTarget = null;
+        decrementFreezeTimers(game);
+        recordPosition(game);
         socket.emit("powerConfirmed", { type, target: [tr, tc] });
         emitUpdate(data.room);
 
       } else if (type === "teleport") {
         const targetPiece = game.board[tr][tc];
         if (targetPiece) return socket.emit("powerRejected", { reason: "Teleport target must be an empty square" });
-        // Find the king
-        const kingChar = playerColor === "white" ? "K" : "k";
-        let kingPos = null;
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
         if (!kingPos) return socket.emit("powerRejected", { reason: "King not found" });
 
         // Check if the teleport is legal (king not in check after teleport)
@@ -294,6 +315,10 @@ if (cluster.isMaster || cluster.isPrimary) {
         game.history.moves.push({ kind: "power", power: "teleport", target: [tr, tc], from: kingPos, to: [tr, tc] });
         game.turn = opponentColor;
         game.lastActivity = Date.now();
+        game.halfMoveClock++; // Power moves increment the 50-move clock
+        game.enPassantTarget = null;
+        decrementFreezeTimers(game);
+        recordPosition(game);
         socket.emit("powerConfirmed", { type, target: [tr, tc] });
         emitUpdate(data.room);
 
@@ -309,10 +334,9 @@ if (cluster.isMaster || cluster.isPrimary) {
         if (chessRules.getPieceType(targetPiece) === "k") {
           return socket.emit("powerRejected", { reason: "Cannot swap with the King itself" });
         }
-        // Find the king
-        const kingChar = playerColor === "white" ? "K" : "k";
-        let kingPos = null;
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
+        if (frozenForMe[`${tr},${tc}`] > 0) {
+          return socket.emit("powerRejected", { reason: "The target piece is frozen and cannot be swapped!" });
+        }
         if (!kingPos) return socket.emit("powerRejected", { reason: "King not found" });
 
         // Check if the swap is legal (king not in check after swap)
@@ -328,15 +352,27 @@ if (cluster.isMaster || cluster.isPrimary) {
         game.board[tr][tc] = kingChar;
         game.poweredKing.swapsLeft[playerColor]--;
         // Swapping forfeits castling rights
+        // Swapping forfeits castling rights
         if (game.castling && game.castling[playerColor]) {
-          game.castling[playerColor].kingside = false;
-          game.castling[playerColor].queenside = false;
+          const rights = game.castling[playerColor];
+          rights.kingside = false;
+          rights.queenside = false;
+          
+          if (chessRules.getPieceType(targetPiece) === "r") {
+            const homeRow = playerColor === "white" ? 7 : 0;
+            if (tr === homeRow && tc === 7) rights.kingside = false;
+            if (tr === homeRow && tc === 0) rights.queenside = false;
+          }
         }
 
         game.history.boards.push(chessRules.clone(game.board));
         game.history.moves.push({ kind: "power", power: "swap", target: [tr, tc], from: kingPos, to: [tr, tc] });
         game.turn = opponentColor;
         game.lastActivity = Date.now();
+        game.halfMoveClock++; // Power moves increment the 50-move clock
+        game.enPassantTarget = null;
+        decrementFreezeTimers(game);
+        recordPosition(game);
         socket.emit("powerConfirmed", { type, target: [tr, tc] });
         emitUpdate(data.room);
 
@@ -406,14 +442,25 @@ if (cluster.isMaster || cluster.isPrimary) {
     }
     
     // 3. Update Castling Rights
-    if (game.castling && game.castling[color]) {
-      const rights = game.castling[color];
-      if (pieceType === "k") {
-        rights.kingside = false;
-        rights.queenside = false;
-      } else if (pieceType === "r") {
-        if (sc === 7) rights.kingside = false;
-        if (sc === 0) rights.queenside = false;
+    if (game.castling) {
+      if (game.castling[color]) {
+        const rights = game.castling[color];
+        if (pieceType === "k") {
+          rights.kingside = false;
+          rights.queenside = false;
+        } else if (pieceType === "r") {
+          if (sc === 7) rights.kingside = false;
+          if (sc === 0) rights.queenside = false;
+        }
+      }
+      
+      // Update opponent's rights if their Rook was captured
+      const opponentColor = color === "white" ? "black" : "white";
+      if (game.castling[opponentColor]) {
+        const oppRights = game.castling[opponentColor];
+        const oppHomeRow = opponentColor === "white" ? 7 : 0;
+        if (tr === oppHomeRow && tc === 7) oppRights.kingside = false;
+        if (tr === oppHomeRow && tc === 0) oppRights.queenside = false;
       }
     }
 
@@ -430,13 +477,23 @@ if (cluster.isMaster || cluster.isPrimary) {
     game.turn = color === "white" ? "black" : "white";
     game.lastActivity = Date.now();
     game.halfMoveClock = (pieceType === "p" || captured) ? 0 : game.halfMoveClock + 1;
+    if (pieceType === "p" || captured) game.positionCounts = {}; // Reset repetition on pawn move/capture
+    
     game.drawOfferFrom = null;
     game.pendingMove = false;
 
-    // Decrement freeze timers: the color that just moved has no freeze applied to them next turn
-    // We decrement the frozen counters for the color that is now about to move (the opponent)
+    decrementFreezeTimers(game);
+    recordPosition(game);
+  }
+
+  function recordPosition(game) {
+    const stateStr = JSON.stringify([game.board, game.turn, game.castling, game.enPassantTarget]);
+    game.positionCounts[stateStr] = (game.positionCounts[stateStr] || 0) + 1;
+  }
+
+  function decrementFreezeTimers(game) {
     if (game.poweredKing) {
-      const nowMoving = game.turn; // already flipped above
+      const nowMoving = game.turn;
       const frozen = game.poweredKing.frozen[nowMoving];
       if (frozen) {
         for (const key of Object.keys(frozen)) {
@@ -453,10 +510,16 @@ if (cluster.isMaster || cluster.isPrimary) {
     const status = game.manualStatus || chessRules.getGameStatus(game.board, game.turn, game);
     
     if (game.mode === "fog-of-war") {
+      const isGameOver = ["checkmate", "stalemate", "resigned", "draw"].includes(status.status);
       ["white", "black"].forEach(color => {
         const sid = game.players[color].socketId;
         const s = io.sockets.sockets.get(sid);
-        if (s) s.emit("update", { ...game, board: buildFogBoard(game.board, color), gameStatus: status });
+        if (s) {
+          const fogUpdate = { ...game, board: buildFogBoard(game.board, color), gameStatus: status };
+          // Hide history in Fog of War until the game is over to prevent cheating
+          if (!isGameOver) delete fogUpdate.history;
+          s.emit("update", fogUpdate);
+        }
       });
     } else {
       io.to(room).emit("update", { ...game, gameStatus: status });
@@ -497,6 +560,23 @@ if (cluster.isMaster || cluster.isPrimary) {
   // --- SERVER START ---
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => console.log(`[Master] Server online at http://localhost:${PORT}`));
+
+  // --- PERIODIC CLEANUP (Every 10 mins) ---
+  setInterval(() => {
+    const now = Date.now();
+    for (const roomId in rooms) {
+      const game = rooms[roomId];
+      const inactiveTime = now - game.lastActivity;
+      const status = game.manualStatus || chessRules.getGameStatus(game.board, game.turn, game);
+      const isGameOver = ["checkmate", "stalemate", "resigned", "draw"].includes(status.status);
+
+      // Clean up finished games after 30 mins, inactive games after 2 hours
+      if ((isGameOver && inactiveTime > 30 * 60 * 1000) || inactiveTime > 2 * 60 * 60 * 1000) {
+        console.log(`[Cleanup] Removing room ${roomId} (Inactive: ${Math.floor(inactiveTime / 60000)}m, Status: ${status.status})`);
+        delete rooms[roomId];
+      }
+    }
+  }, 10 * 60 * 1000);
 
 } else {
   // Worker process
