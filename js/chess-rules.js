@@ -13,6 +13,16 @@ const isFriendlyPiece = (p, isWhite) => p && p !== "" && (isWhite ? isWhitePiece
 const getValidMoves = (board, r, c, isWhite, game = {}) => {
   const piece = board[r][c];
   if (!piece) return [];
+
+  // Check if the piece is frozen (Powered King mode)
+  if (game.poweredKing && game.poweredKing.frozen) {
+    const color = isWhite ? "white" : "black";
+    const frozenForMe = game.poweredKing.frozen[color];
+    if (frozenForMe && frozenForMe[`${r},${c}`] > 0) {
+      return [];
+    }
+  }
+
   const type = getPieceType(piece);
   const moves = [];
 
