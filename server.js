@@ -64,6 +64,57 @@ if (cluster.isMaster || cluster.isPrimary) {
   app.get("/health", (req, res) => res.json({ status: "ok", role: "coordinator" }));
 
   io.on("connection", (socket) => {
+    socket.on("stress-test", () => {
+      console.log(`[Master] Stress test triggered by ${socket.id}. Flooding workers...`);
+      for (let i = 0; i < 100; i++) {
+        const worker = Object.values(cluster.workers)[i % Object.keys(cluster.workers).length];
+        worker.send({
+          type: "VALIDATE_MOVE",
+          taskId: `stress-${Date.now()}-${i}`,
+          board: Array(8).fill(Array(8).fill(null)),
+          from: { r: 6, c: 4 },
+          to: { r: 4, c: 4 },
+          isWhite: true,
+          gameData: { mode: "regular" }
+        });
+      }
+    });
+
+    // Track start times for stress test tasks to calculate latency
+    const stressTasks = new Map();
+
+    socket.on("stress-test", () => {
+      console.log("\n🔥 [PDC STRESS TEST] RECEIVED! FLOODING WORKERS WITH 100 PARALLEL TASKS...");
+      for (let i = 0; i < 100; i++) {
+        const taskId = `stress-${Date.now()}-${i}-${Math.random()}`;
+        stressTasks.set(taskId, Date.now());
+        
+        const worker = Object.values(cluster.workers)[i % Object.keys(cluster.workers).length];
+        worker.send({
+          type: "VALIDATE_MOVE",
+          taskId: taskId,
+          board: Array(8).fill(Array(8).fill(null)),
+          from: { r: 6, c: 4 },
+          to: { r: 4, c: 4 },
+          isWhite: true,
+          gameData: { mode: "regular" }
+        });
+      }
+    });
+
+    // Handle responses from workers (including stress test tasks)
+    Object.values(cluster.workers).forEach(worker => {
+      worker.on("message", (msg) => {
+        if (msg.type === "VALIDATION_RESULT" && stressTasks.has(msg.taskId)) {
+          const startTime = stressTasks.get(msg.taskId);
+          stressTasks.delete(msg.taskId);
+          
+          totalMoves++;
+          totalMoveTimeMs += (Date.now() - startTime);
+        }
+      });
+    });
+
     socket.on("queue", (data) => {
       const mode = data.mode || "regular";
       for (const m in queues) queues[m] = queues[m].filter(id => id !== socket.id);
