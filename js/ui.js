@@ -241,6 +241,8 @@ function resetToLobbyUi({ clearBoard = true } = {}) {
   capturedWhite = [];
   capturedBlack = [];
   if (clearBoard) board = null;
+  matchHistory = { boards: [], moves: [] };
+  reviewIndex = 0;
 
   isQueued = false;
   modeSelectEl.disabled = false;
