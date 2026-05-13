@@ -23,6 +23,7 @@ let promotionResolver = null;
 let matchHistory = { boards: [], moves: [] };
 let reviewIndex = 0;
 const RECONNECT_STORAGE_KEY = "chessReconnectState";
+let rejoinDecisionPending = false;
 
 
 window.symbols = {
@@ -36,7 +37,8 @@ const audio = {
   capture: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/capture.mp3"),
   check: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/check.mp3"),
   start: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-start.mp3"),
-  end: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-end.mp3")
+  end: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-end.mp3"),
+  notify: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/notify.mp3")
 };
 
 function playSound(type) {
@@ -68,13 +70,7 @@ socket.on("queued", (d) => {
 });
 
 socket.on("queueCancelled", () => {
-  isQueued = false;
-  modeSelectEl.disabled = false;
-  queueBtnEl.disabled = false;
-  cancelQueueBtnEl.disabled = true;
-  lobbyControlsEl.style.display = "flex";
-  updateTopPanelVisibility();
-  statusEl.textContent = "Pick a mode and press Queue.";
+  resetToLobbyUi({ clearBoard: true });
   log("Queue cancelled.", "info");
 });
 
@@ -106,6 +102,7 @@ socket.on("start", (d) => {
   updateTopPanelVisibility();
   endOverlayEl.style.display = "none";
   reviewOverlayEl.style.display = "none";
+  logsEl.innerHTML = ""; // Clear move logs for new game
 
   // Game UI (show captured + game actions only after match start)
   document.querySelector('.game-area').style.display = 'flex';
@@ -114,6 +111,23 @@ socket.on("start", (d) => {
   reviewBoardEl.innerHTML = "";
   statusEl.textContent = `You are playing as ${myColor.toUpperCase()} (${modeLabel(mode)})`;
   log(`Game started! You are ${myColor}. Mode: ${mode}. Room: ${room}`, "success");
+  
+  // Title Flashing (Subtle notification for background tabs)
+  if (document.hidden) {
+    let originalTitle = document.title;
+    let isFlash = false;
+    const flashInterval = setInterval(() => {
+      if (!document.hidden) {
+        clearInterval(flashInterval);
+        document.title = originalTitle;
+      } else {
+        document.title = isFlash ? "!!! MATCH STARTED !!!" : originalTitle;
+        isFlash = !isFlash;
+      }
+    }, 1000);
+  }
+  
+  playSound("start");
   updatePowerPanel();
   updateGameActions();
 });
@@ -211,6 +225,24 @@ socket.on("update", (d) => {
 
   if (typeof render === "function") render();
   if (typeof renderCaptured === "function") renderCaptured();
+
+  // If we just reconnected and the game is still active, ask the user if they want to stay
+  if (rejoinDecisionPending && room && myColor && !isGameOverStatus(gameStatus.status)) {
+    rejoinDecisionPending = false; // Only ask once
+    showModal({
+      title: "Match in Progress",
+      message: "You have a match in progress. Would you like to rejoin the game or abandon it?",
+      primaryText: "Rejoin",
+      secondaryText: "Abandon",
+      onPrimary: () => {
+        log("Match rejoined.", "success");
+      },
+      onSecondary: () => {
+        socket.emit("resign", { room });
+        log("Match abandoned.", "info");
+      }
+    });
+  }
 });
 
 
@@ -252,6 +284,7 @@ socket.on("drawOfferSent", () => {
 });
 
 socket.on("drawOffered", (d) => {
+  playSound("notify");
   showModal({
     title: "Draw offer",
     message: `${String(d.from || "Opponent").toUpperCase()} offered a draw. Accept?`,
@@ -301,14 +334,20 @@ socket.on("error", (error) => {
 });
 
 socket.on("opponentDisconnected", (d) => {
+  playSound("notify");
   log(`⚠️ Opponent (${d.color}) disconnected!`, "error");
   showModal({
     title: "Opponent Left",
-    message: "Your opponent has disconnected from the match. You can wait a moment or return to the lobby.",
+    message: "Your opponent has disconnected from the match. You can wait for them to return or leave the match to end it.",
     primaryText: "Wait",
-    secondaryText: "Lobby",
-    onPrimary: () => {},
-    onSecondary: () => resetToLobbyUi({ clearBoard: true })
+    secondaryText: "Leave Match",
+    onPrimary: () => {
+      log("Waiting for opponent...", "info");
+    },
+    onSecondary: () => {
+      socket.emit("resign", { room });
+      log("You left the match.", "info");
+    }
   });
 });
 
@@ -316,7 +355,7 @@ socket.on("opponentDisconnected", (d) => {
 // MOVE
 // =========================
 function canSendActions() {
-  return Boolean(room && myColor);
+  return Boolean(room && myColor && !window.gameData.drawOfferFrom);
 }
 
 function isPromotionMove(fromR, toR, pieceChar) {
@@ -407,8 +446,10 @@ socket.on("connect", () => {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (!parsed?.room || !parsed?.token) return;
+    
+    rejoinDecisionPending = true; // Set flag to prompt once we get the update
     socket.emit("reconnect", { room: parsed.room, token: parsed.token });
-    log("Attempting to reconnect to your previous match...", "info");
+    log("Checking for active match...", "info");
   } catch (err) {
     sessionStorage.removeItem(RECONNECT_STORAGE_KEY);
   }

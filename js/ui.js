@@ -221,7 +221,7 @@ function setReviewIndex(i) {
   reviewMetaEl.textContent = ply === 0 ? `Start position (0/${total})` : `${moveLabel(lastMove, ply - 1)} (${ply}/${total})`;
 }
 
-function resetToLobbyUi({ clearBoard = false } = {}) {
+function resetToLobbyUi({ clearBoard = true } = {}) {
   pendingPower = null;
   selected = null;
   validMoves = [];
@@ -312,13 +312,13 @@ resignBtnEl.addEventListener("click", () => {
 endRequeueBtnEl.addEventListener("click", () => {
   const selectedMode = endModeSelectEl.value;
   modeSelectEl.value = selectedMode;
-  resetToLobbyUi({ clearBoard: false });
+  resetToLobbyUi({ clearBoard: true });
   socket.emit("queue", { mode: selectedMode });
 });
 
 endLobbyBtnEl.addEventListener("click", () => {
   modeSelectEl.value = endModeSelectEl.value;
-  resetToLobbyUi({ clearBoard: false });
+  resetToLobbyUi({ clearBoard: true });
   log("Returned to lobby.", "info");
 });
 

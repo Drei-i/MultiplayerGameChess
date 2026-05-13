@@ -147,6 +147,10 @@ if (cluster.isMaster || cluster.isPrimary) {
         return socket.emit("moveRejected", { reason: game.pendingMove ? "Move already pending" : "Not your turn" });
       }
 
+      if (game.drawOfferFrom) {
+        return socket.emit("moveRejected", { reason: "A draw offer is pending. Please respond to the offer first." });
+      }
+
       // Check if the moving piece is frozen (Powered King mode)
       if (game.poweredKing) {
         const frozenForMe = game.poweredKing.frozen[playerColor] || {};
@@ -242,6 +246,7 @@ if (cluster.isMaster || cluster.isPrimary) {
       socket.emit("drawOfferSent");
       const oppId = game.players[playerColor === "white" ? "black" : "white"].socketId;
       io.to(oppId).emit("drawOffered", { from: playerColor });
+      emitUpdate(data.room);
     });
 
     socket.on("respondDraw", (data) => {
@@ -267,6 +272,7 @@ if (cluster.isMaster || cluster.isPrimary) {
       const playerColor = game.players.white.socketId === socket.id ? "white" : "black";
       const opponentColor = playerColor === "white" ? "black" : "white";
       if (game.turn !== playerColor) return socket.emit("powerRejected", { reason: "Not your turn" });
+      if (game.drawOfferFrom) return socket.emit("powerRejected", { reason: "A draw offer is pending" });
 
       const frozenForMe = game.poweredKing.frozen[playerColor] || {};
 
