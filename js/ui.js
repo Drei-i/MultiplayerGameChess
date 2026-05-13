@@ -64,7 +64,10 @@ window.sounds = {
   move: () => playTone(300, 'sine', 0.1, 0.2),
   capture: () => playTone(150, 'square', 0.15, 0.2),
   check: () => playTone(400, 'triangle', 0.3, 0.3),
-  error: () => playTone(100, 'sawtooth', 0.2, 0.2)
+  error: () => playTone(100, 'sawtooth', 0.2, 0.2),
+  start: () => { playTone(400, 'sine', 0.1, 0.2); setTimeout(() => playTone(600, 'sine', 0.1, 0.2), 100); },
+  end: () => { playTone(600, 'sine', 0.1, 0.2); setTimeout(() => playTone(400, 'sine', 0.1, 0.2), 100); },
+  notify: () => { playTone(500, 'triangle', 0.1, 0.2); setTimeout(() => playTone(500, 'triangle', 0.1, 0.2), 150); }
 };
 
 function log(message, type = "info") {

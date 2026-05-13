@@ -24,6 +24,7 @@ let matchHistory = { boards: [], moves: [] };
 let reviewIndex = 0;
 const RECONNECT_STORAGE_KEY = "chessReconnectState";
 let rejoinDecisionPending = false;
+let lastProcessedMoveCount = 0;
 
 
 window.symbols = {
@@ -31,25 +32,13 @@ window.symbols = {
   R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔", P: "♙"
 };
 
-// --- SOUNDS ---
-const audio = {
-  move: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/move-self.mp3"),
-  capture: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/capture.mp3"),
-  check: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/check.mp3"),
-  start: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-start.mp3"),
-  end: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/game-end.mp3"),
-  notify: new Audio("https://images.chesscomfiles.com/chess-themes/sounds/_standard/notify.mp3")
-};
-
 function playSound(type) {
   try {
-    if (audio[type]) {
-      const s = audio[type].cloneNode();
-      s.volume = 0.5;
-      s.play().catch(() => {});
+    if (window.sounds && window.sounds[type]) {
+      window.sounds[type]();
     }
-  } catch (e) {
-    console.warn("Sound play failed", e);
+  } catch (err) {
+    console.warn("Sound play failed", err);
   }
 }
 
@@ -201,22 +190,31 @@ socket.on("update", (d) => {
   // Play sound and trigger effects for last move
   if (d.history && d.history.moves && d.history.moves.length > 0) {
     const lastMove = d.history.moves[d.history.moves.length - 1];
+    const totalMoves = d.history.moves.length;
     
-    // Trigger visual effects
-    if (typeof triggerMoveTrail === "function") {
-      triggerMoveTrail(lastMove.from, lastMove.to);
-    }
-    
-    if (lastMove.captured) {
-      playSound("capture");
-      if (typeof triggerCaptureEffect === "function") {
-        triggerCaptureEffect(lastMove.to[0], lastMove.to[1]);
+    // Only play sounds for NEW moves to avoid noise on refresh/reconnect
+    if (totalMoves > lastProcessedMoveCount) {
+      // Trigger visual effects
+      if (typeof triggerMoveTrail === "function") {
+        triggerMoveTrail(lastMove.from, lastMove.to);
       }
-    } else if (window.gameStatus.status === "check") {
-      playSound("check");
-    } else {
-      playSound("move");
+      
+      if (lastMove.captured) {
+        playSound("capture");
+        if (typeof triggerCaptureEffect === "function") {
+          triggerCaptureEffect(lastMove.to[0], lastMove.to[1]);
+        }
+      } else if (window.gameStatus.status === "check") {
+        playSound("check");
+      } else {
+        playSound("move");
+      }
+      
+      lastProcessedMoveCount = totalMoves;
     }
+  } else if (!d.history || !d.history.moves || d.history.moves.length === 0) {
+    // Reset count if it's a brand new game
+    lastProcessedMoveCount = 0;
   }
 
   if (typeof render === "function") render();
