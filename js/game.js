@@ -93,7 +93,7 @@ socket.on("start", (d) => {
   room = d.room;
   mode = d.mode || mode;
   if (d.token) {
-    localStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify({
+    sessionStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify({
       room: d.room,
       token: d.token
     }));
@@ -152,7 +152,7 @@ socket.on("update", (d) => {
   // Clear reconnect token if game is finished
   const finishedStatuses = ["checkmate", "stalemate", "resigned", "draw"];
   if (finishedStatuses.includes(gameStatus.status)) {
-    localStorage.removeItem(RECONNECT_STORAGE_KEY);
+    sessionStorage.removeItem(RECONNECT_STORAGE_KEY);
   }
 
   if (turn === myColor && gameStatus.status === "active") {
@@ -403,13 +403,13 @@ socket.on("roomFull", () => {
 socket.on("connect", () => {
   moveInFlight = false;
   try {
-    const raw = localStorage.getItem(RECONNECT_STORAGE_KEY);
+    const raw = sessionStorage.getItem(RECONNECT_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (!parsed?.room || !parsed?.token) return;
     socket.emit("reconnect", { room: parsed.room, token: parsed.token });
     log("Attempting to reconnect to your previous match...", "info");
   } catch (err) {
-    localStorage.removeItem(RECONNECT_STORAGE_KEY);
+    sessionStorage.removeItem(RECONNECT_STORAGE_KEY);
   }
 });

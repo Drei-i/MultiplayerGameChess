@@ -95,6 +95,7 @@ if (cluster.isMaster || cluster.isPrimary) {
         socketToRoom[p1Id] = room;
         socketToRoom[p2Id] = room;
 
+        io.to(p1Id).emit("start", { color: "white", room, mode, token: token1 });
         io.to(p2Id).emit("start", { color: "black", room, mode, token: token2 });
         recordPosition(rooms[room]); // Record starting position
         emitUpdate(room);
@@ -173,6 +174,7 @@ if (cluster.isMaster || cluster.isPrimary) {
         if (game.pendingMove) {
           console.warn(`[Room ${data.room}] Move validation timed out. Releasing lock.`);
           game.pendingMove = false;
+          socket.emit("moveRejected", { reason: "Server timeout during validation" });
         }
       }, 5000);
 
@@ -192,12 +194,18 @@ if (cluster.isMaster || cluster.isPrimary) {
             return socket.emit("moveRejected", { reason: "Illegal (validated by worker)" });
           }
 
-          applyMove(game, data, playerColor);
-          socket.emit("moveConfirmed", { from: data.from, to: data.to, captured, promoted: isPromo });
-          
-          totalMoves++;
-          totalMoveTimeMs += (Date.now() - start);
-          emitUpdate(data.room);
+          try {
+            applyMove(game, data, playerColor);
+            socket.emit("moveConfirmed", { from: data.from, to: data.to, captured, promoted: isPromo });
+            
+            totalMoves++;
+            totalMoveTimeMs += (Date.now() - start);
+            emitUpdate(data.room);
+          } catch (err) {
+            console.error(`[Room ${data.room}] Error applying move:`, err);
+            game.pendingMove = false;
+            socket.emit("moveRejected", { reason: "Internal server error applying move" });
+          }
         }
       };
 
@@ -209,7 +217,11 @@ if (cluster.isMaster || cluster.isPrimary) {
         from: data.from, 
         to: data.to, 
         isWhite: (playerColor === "white"), 
-        gameData: game 
+        gameData: {
+          castling: game.castling,
+          enPassantTarget: game.enPassantTarget,
+          poweredKing: game.poweredKing
+        }
       });
     });
 
@@ -285,7 +297,7 @@ if (cluster.isMaster || cluster.isPrimary) {
         game.lastActivity = Date.now();
         game.halfMoveClock++; // Power moves increment the 50-move clock
         game.enPassantTarget = null;
-        decrementFreezeTimers(game);
+        decrementFreezeTimers(game, playerColor);
         recordPosition(game);
         socket.emit("powerConfirmed", { type, target: [tr, tc] });
         emitUpdate(data.room);
@@ -317,7 +329,7 @@ if (cluster.isMaster || cluster.isPrimary) {
         game.lastActivity = Date.now();
         game.halfMoveClock++; // Power moves increment the 50-move clock
         game.enPassantTarget = null;
-        decrementFreezeTimers(game);
+        decrementFreezeTimers(game, playerColor);
         recordPosition(game);
         socket.emit("powerConfirmed", { type, target: [tr, tc] });
         emitUpdate(data.room);
@@ -371,7 +383,7 @@ if (cluster.isMaster || cluster.isPrimary) {
         game.lastActivity = Date.now();
         game.halfMoveClock++; // Power moves increment the 50-move clock
         game.enPassantTarget = null;
-        decrementFreezeTimers(game);
+        decrementFreezeTimers(game, playerColor);
         recordPosition(game);
         socket.emit("powerConfirmed", { type, target: [tr, tc] });
         emitUpdate(data.room);
@@ -482,7 +494,7 @@ if (cluster.isMaster || cluster.isPrimary) {
     game.drawOfferFrom = null;
     game.pendingMove = false;
 
-    decrementFreezeTimers(game);
+    decrementFreezeTimers(game, color);
     recordPosition(game);
   }
 
@@ -491,10 +503,9 @@ if (cluster.isMaster || cluster.isPrimary) {
     game.positionCounts[stateStr] = (game.positionCounts[stateStr] || 0) + 1;
   }
 
-  function decrementFreezeTimers(game) {
+  function decrementFreezeTimers(game, color) {
     if (game.poweredKing) {
-      const nowMoving = game.turn;
-      const frozen = game.poweredKing.frozen[nowMoving];
+      const frozen = game.poweredKing.frozen[color];
       if (frozen) {
         for (const key of Object.keys(frozen)) {
           frozen[key]--;
