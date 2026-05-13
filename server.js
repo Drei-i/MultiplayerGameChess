@@ -100,6 +100,13 @@ if (cluster.isMaster || cluster.isPrimary) {
         emitUpdate(room);
       }
     });
+    socket.on("cancelQueue", () => {
+      console.log(`[Queue] Player ${socket.id} cancelled queue.`);
+      for (const m in queues) {
+        queues[m] = queues[m].filter(id => id !== socket.id);
+      }
+      socket.emit("queueCancelled");
+    });
 
     socket.on("reconnect", (data) => {
       const { room, token } = data;
@@ -261,14 +268,19 @@ if (cluster.isMaster || cluster.isPrimary) {
       } else if (type === "teleport") {
         const targetPiece = game.board[tr][tc];
         if (targetPiece) return socket.emit("powerRejected", { reason: "Teleport target must be an empty square" });
-        if (chessRules.isSquareAttacked(game.board, tr, tc, playerColor !== "white")) {
-          return socket.emit("powerRejected", { reason: "Target square is protected by the enemy" });
-        }
         // Find the king
         const kingChar = playerColor === "white" ? "K" : "k";
         let kingPos = null;
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
         if (!kingPos) return socket.emit("powerRejected", { reason: "King not found" });
+
+        // Check if the teleport is legal (king not in check after teleport)
+        const testBoard = chessRules.clone(game.board);
+        testBoard[kingPos[0]][kingPos[1]] = "";
+        testBoard[tr][tc] = kingChar;
+        if (chessRules.isSquareAttacked(testBoard, tr, tc, playerColor !== "white")) {
+          return socket.emit("powerRejected", { reason: "Target square is protected by the enemy" });
+        }
 
         game.board[tr][tc] = kingChar;
         game.board[kingPos[0]][kingPos[1]] = "";
@@ -302,6 +314,14 @@ if (cluster.isMaster || cluster.isPrimary) {
         let kingPos = null;
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (game.board[r][c] === kingChar) kingPos = [r, c];
         if (!kingPos) return socket.emit("powerRejected", { reason: "King not found" });
+
+        // Check if the swap is legal (king not in check after swap)
+        const testBoard = chessRules.clone(game.board);
+        testBoard[kingPos[0]][kingPos[1]] = targetPiece;
+        testBoard[tr][tc] = kingChar;
+        if (chessRules.isSquareAttacked(testBoard, tr, tc, playerColor !== "white")) {
+          return socket.emit("powerRejected", { reason: "Cannot swap into check!" });
+        }
 
         // Perform the swap
         game.board[kingPos[0]][kingPos[1]] = targetPiece;
